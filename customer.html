@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+    Name: Felipe Barbosa Figueira
+    Date: 01/30/2023
+    Section : CST 8285 Section 312
+    This is the LAB02 , I had to make a formulary on html page
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="author" content="Felipe Barbosa Figueira">
+    <title>Personal Form</title>
+
+</head>
+<body>
+    <form action="assaas" method="post">
+        <fieldset>
+            <fieldset>
+                <legend>1. User Info</legend>
+                <p>
+                    <label for="firstname">First Name</label><br>
+                    <input type="text" id="firstname" name="firstname" minlength ="2" maxlength="10" required>
+                </p>
+
+                <p>
+                    <label for="lastname">Last Name</label><br>
+                    <input type="text" id="lastname" name="lastname" minlength ="2" maxlength="10" required>
+                </p>    
+
+                <p>    
+                    <label for="email">Email</label><br>
+                    <input type="email" id="email" name="email" placeholder="Format: xxx@yyy.zzz" size="60" minlength ="6" required>
+                </p>    
+
+                <p>
+                    <label for="password">Password</label><br>
+                    <input type="password" id="password" name="password" minlength="8" maxlength="20" placeholder="at least 8 characters" required>
+                </p>
+
+                <p>
+                    <label for="repeat_password">Password Repeat</label><br>
+                    <input type="password" id="repeat_password" name="repeat_password" minlength="8" maxlength="20" placeholder="at least 8 characters" required>
+                </p>
+            </fieldset>
+
+            <fieldset>
+                <legend>2. Location</legend>
+                <p>
+                    <label for="address">Address</label><br>
+                    <input type="text" id="address" name="address" size="60" required>
+                </p>
+
+                <p>
+                    <label for="city">City</label><br>
+                    <input type="text" id="city" name="city" maxlength="15" required>
+                </p>
+
+                <p>
+                    <label for="state">State</label><br>
+                    <input type="text" id="state" name="state" size="2" minlength ="2" maxlength="10" required>
+                </p>
+
+                <p>
+                    <label for="zip">Zip</label><br>
+                    <input type="text" id="zip" name="zip" size="6" minlength ="6" maxlength="6" required>
+                </p>
+
+                <p>
+                    <label for="phone">Phone</label><br>
+                    <input type="text" id="phone" name="phone" size="10" minlength ="11" maxlength="12" placeholder="NNN-NNN-NNNN" required>
+                </p>
+
+                <p>
+                    <label for="country">Country:</label><br>
+                    <select id="country" name="country" size="1" required>
+                        <option value="">Select a country</option>
+                        <option value="CA">Canada</option>
+                        <option value="AF">Afghanistan</option>
+                        <option value="AL">Albania</option>
+                        <option value="CF">Central African Republic</option>
+                        <option value="TD">Chad</option>
+                        <option value="CL">Chile</option>
+                        <option value="CN">China</option>
+                        <option value="CX">Christmas Island</option>
+                        <option value="NL">Not listed</option>
+                    </select>
+
+                    <p>
+                        <input type="radio" id="north_america" name="continent" required>
+                        <label for="north_america">North America</label>
+                    </p>
+                    <p>
+                        <input type="radio" id="europe" name="continent">
+                        <label for="europe">Europe</label>
+                    </p>
+                    <p>  
+                        <input type="radio" id="south_america" name="continent">
+                        <label for="south_america">South America</label>
+                    </p>
+            </fieldset>
+
+            <fieldset>
+                <legend>3. Personal Details</legend>
+                    <p>
+                        <label for="birth_day">Birth Day</label><br>
+                        <input type="date" id="birth_day" name="birth_day" size="8" required>
+                    </p>
+
+                    <p>
+                        <label for="favoritecolor" >Favorite Color</label><br>
+                        <select id="favoritecolor" required>
+                            <option value="">Select a color</option>
+                            <option value="ff0000">Red</option>
+                            <option value="#00ff00">Green</option>
+                            <option value="#0000ff">Blue</option>
+                        </select>
+                    </p>
+
+                    <p>
+                        <label for="interestinart">Interest in Art</label><br>
+                        Minimal <input type="range" min="0" max="10" step="2" id="interestinart" name="interestinart"> Love it!
+                    </p>
+            </fieldset>
+
+            <h3><strong>4. All Done</strong></h3>
+                <p>
+                    <input type="checkbox" id="agreement" name="agreement">
+                    <label for="agreement">I agree to the <a href="https://level2-lab2.w3spaces.com/lab2/terms_of_the_site.html" target=”_blank”>Terms of the Site</a></label><br>
+                    <input type="submit" value="Submit"> 
+                    <input type="submit" value="reset"><br>
+                    
+                </p>
+                <p>2023 Copyright</p>
+
+        </fieldset>
+
+    </form>
+</body>
+</html>
