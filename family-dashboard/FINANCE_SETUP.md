@@ -1,16 +1,15 @@
 # Finance Dashboard — private setup
 
-**Draft feature: do not merge before configuration and testing.** Existing family calendar, clothes and night schedules must remain unchanged.
+**Staged for production, not yet live.** Automated tests pass and private seed data is already stored in the new KV namespace. Do not merge before the production KV binding and PIN secret are configured and verified. Existing family calendar, clothes and night schedules must remain unchanged.
 
 ## Cloudflare Pages
 
-1. Create a private Cloudflare Workers KV namespace (e.g. `family_finance_private`).
-2. Bind it to the Pages project `family-smart-dashboard` under Settings > Bindings > KV, using the exact binding name **`FINANCE_KV`**.
+1. [DONE 2026-10-20] Create the private Cloudflare Workers KV namespace `family_finance_private` (ID `7af58bf9134141c6b126427f3f44d773`).
+2. [PENDING] Bind it to the Pages project `family-smart-dashboard` under Settings > Bindings > KV, using the exact binding name **`FINANCE_KV`** (Production environment).
 3. Add **Secret** variables under Settings > Variables and Secrets:
-   - `FINANCE_PIN`: owner's chosen fixed six-digit viewer PIN (never commit).
-   - The same server-side `FINANCE_PIN` gates viewing and administration, per the owner's request. **Anyone with the PIN may edit the expenses if they can reach the dashboard; do not share it with visitors.**
-   - `FINANCE_SESSION_SECRET`: 32+ unpredictable characters, e.g. generate locally with `openssl rand -hex 32`.
-4. Redeploy after binding and secret changes. Keep Cloudflare Access enforced for the production domain, API paths, and preview domains.
+   - [PENDING] `FINANCE_PIN`: owner's fixed six-digit PIN (never commit). Owner selected the same PIN for viewing and administration. **Anyone knowing the PIN can edit expenses if they have Cloudflare Access to the site; do not share it with visitors.**
+   - [DONE] `FINANCE_SESSION_SECRET`: 64-character cryptographically random secret generated in the Omarchy terminal and uploaded encrypted using Wrangler. Value was not printed or committed.
+4. [PENDING] Redeploy after binding and secret changes. Keep Cloudflare Access enforced for the production domain, API paths, and preview domains. Test authentication before marking this feature live.
 
 Do not commit personal household values, PINs, bank credentials, statements, bank alerts or the generated import JSON to this public GitHub repo.
 
@@ -25,9 +24,9 @@ Do not commit personal household values, PINs, bank credentials, statements, ban
 
 ## Notion import
 
-A separate private `family_finance_initial_import.json` file holds 18 expenses from the user's 2026-09-16 Notion **Gastos Fixos** snapshot. No account numbers, bank data, login details or passwords are included.
+[DONE 2026-10-20] Eighteen estimated expenses from the private Notion **Gastos Fixos** snapshot dated 2026-09-16 have already been written directly into `family_finance_private` under key `finance:items:v1` using Wrangler. A subsequent remote read verified all 18 rows, unique IDs, a CAD 5,087.05 aggregate monthly reserve, and status `review` on every row. The temporary private JSON copies were deleted from the Omarchy working directory after verification. No personal expenses or payment details are in Git.
 
-From PC admin: **Import JSON** → review/correct the historical estimates → **Save changes**. Import itself never writes until Save. Review the status, billing dates, and amounts; past estimates are not validated current bank transactions. The monthlyBudget field is the **monthly reserve**, even for biweekly or quarterly bills.
+Once deployed, the PC admin page will load those 18 records automatically. There is **no need to import them again** unless deliberately replacing or updating them. Review their status, billing dates and monthly amounts: these are historical estimates, not validated current bank transactions. For biweekly or quarterly bills, `monthlyBudget` represents the monthly reserve.
 
 ## Verification before launch
 
