@@ -8,7 +8,7 @@
 2. Bind it to the Pages project `family-smart-dashboard` under Settings > Bindings > KV, using the exact binding name **`FINANCE_KV`**.
 3. Add **Secret** variables under Settings > Variables and Secrets:
    - `FINANCE_PIN`: owner's chosen fixed six-digit viewer PIN (never commit).
-   - `FINANCE_ADMIN_PASSWORD`: distinct strong admin password of **at least 12 characters**.
+   - The same server-side `FINANCE_PIN` gates viewing and administration, per the owner's request. **Anyone with the PIN may edit the expenses if they can reach the dashboard; do not share it with visitors.**
    - `FINANCE_SESSION_SECRET`: 32+ unpredictable characters, e.g. generate locally with `openssl rand -hex 32`.
 4. Redeploy after binding and secret changes. Keep Cloudflare Access enforced for the production domain, API paths, and preview domains.
 
@@ -18,7 +18,7 @@ Do not commit personal household values, PINs, bank credentials, statements, ban
 
 - The kiosk's Finance menu is manual only, requires a PIN, and is automatically locked after 2 minutes idle or 3 minutes total.
 - When a user switches panel, Finance logs out. The 30-minute manual selection timeout still returns to the usual scheduled screen.
-- Unlinked PC admin screen: `/family-dashboard/finance-admin/`. It requires a **separate password**.
+- Unlinked PC admin screen: `/family-dashboard/finance-admin/`. It uses the same six-digit PIN.
 - All server finance GET/PUT methods require signed HttpOnly Secure cookies; PUT additionally requires admin authentication.
 - Records are stored in `FINANCE_KV` and are not published as static site assets.
 - Basic PIN/admin failed-attempt lockout uses KV. Because KV is eventually consistent, also configure Cloudflare WAF rate limiting for `/api/finance/login` and `/api/finance/admin-login` if available.
