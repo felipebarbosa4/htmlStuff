@@ -35,8 +35,13 @@ window.ActivitiesPanel={
         const img=element('img');img.alt='Photo of the activity';img.loading='lazy';img.src=url;
         const previous=container.querySelector('.activities-photo-placeholder');if(previous)previous.remove();
         container.prepend(img);
-        const names=(data.credits||[]).map(c=>c.name).filter(Boolean);
-        const credit=element('span','activities-photo-credit',names.length?'Photo: '+names.join(', '):'Photo: Google Places');
+        const people=(data.credits||[]).filter(c=>c.name);
+        const credit=element('span','activities-photo-credit');
+        credit.append(document.createTextNode('Photo: '));
+        if(!people.length)credit.append(document.createTextNode('Google Places'));
+        people.forEach((person,i)=>{if(i)credit.append(document.createTextNode(', '));
+          const url=cleanLink(person.uri);if(url){const a=link(person.name,url);a.addEventListener('click',e=>e.stopPropagation(),{signal});credit.append(a);}
+          else credit.append(document.createTextNode(person.name));});
         container.append(credit);
       };
       if(images.has(id)){finish(images.get(id));return;}
@@ -72,6 +77,7 @@ window.ActivitiesPanel={
       const maps=cleanLink(item.mapsUrl);if(maps)actions.append(link('📌 Google listing',maps));
       const close=element('button','activities-close','Close');close.type='button';close.addEventListener('click',closeModal,{signal});actions.append(close);
       panel.append(actions);
+      for(const source of (item.attributions||[])) {const u=cleanLink(source.uri);if(u)panel.append(link('Source: '+(source.provider||'Data provider'),u));}
       const note=element('p','activities-sub','Hours and prices can change. Driving estimate starts from home; Maps may use your current location.');
       panel.append(note);modal.append(panel);modal.addEventListener('click',e=>{if(e.target===modal)closeModal();},{signal});
       document.body.append(modal);close.focus();
@@ -79,7 +85,7 @@ window.ActivitiesPanel={
     function makeCard(item) {
       const card=element('article','activities-card');card.tabIndex=0;card.setAttribute('role','button');
       card.setAttribute('aria-label',item.name+', show details');
-      card.addEventListener('click',()=>showDetails(item),{signal});
+      card.addEventListener('click',e=>{if(e.target.closest('a'))return;showDetails(item);},{signal});
       card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showDetails(item);}},{signal});
       const photo=element('div','activities-photo');photo.append(element('span','activities-photo-placeholder',EMOJI[item.category]||'✨'));
       const desc=element('div','activities-description'),heading=element('div','activities-heading');
