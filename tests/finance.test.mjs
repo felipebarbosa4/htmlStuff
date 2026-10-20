@@ -100,8 +100,23 @@ test('kiosk schedule unchanged and finance never an automatic mode',async()=>{
  assert.ok(html.includes('data-mode="finance"'));
  // Cloudflare Pages serves a copy of index.html at / but JS/CSS live in /family-dashboard/.
  // Relative finance.js and finance.css paths leave the entire kiosk stage blank.
- assert.ok(html.includes('src="/family-dashboard/finance.js"'));
- assert.ok(html.includes('href="/family-dashboard/finance.css"'));
+ assert.match(html,/src="\/family-dashboard\/finance\.js\?v=[^"]+"/);
+ assert.match(html,/href="\/family-dashboard\/finance\.css\?v=[^"]+"/);
  assert.ok(!html.includes('finance-admin/'));
  assert.ok(!html.includes('378912'));
+});
+
+test('Finance UI uses six private PIN dots and a dark dashboard theme',async()=>{
+ const [js,css]=await Promise.all([
+  readFile(new URL('../family-dashboard/finance.js',import.meta.url),'utf8'),
+  readFile(new URL('../family-dashboard/finance.css',import.meta.url),'utf8')
+ ]);
+ assert.ok(js.includes('class="finance-pin-dots"'));
+ assert.equal((js.match(/class="finance-pin-dot"/g)||[]).length,6);
+ assert.ok(js.includes("form.requestSubmit()"),'PIN automatically submits after its sixth digit');
+ assert.ok(js.includes("inputmode=\"numeric\""),'tablet shows numeric keyboard');
+ assert.ok(!js.includes('378912'),'PIN must never be embedded in client JavaScript');
+ assert.match(css,/\.finance-shell\{background:#10263d;color:#eef6ff\}/);
+ assert.match(css,/\.finance-pin-entry:focus-within/);
+ assert.ok(!css.includes('background:#fafbf9'),'Finance cannot revert to the old light background');
 });
