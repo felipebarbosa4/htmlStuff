@@ -58,14 +58,24 @@ test('manual generation: Muse, real route threshold, KV persistence, photo attri
     if(uri.includes('/calendar/v3/calendars/family/events'))return response({items:[]});
     if(uri==='https://api.meta.ai/v1/responses') {
       const input=JSON.parse(options.body).input;
-      const c=JSON.parse(input.slice(input.indexOf('Candidates: ')+12));
-      const ids=c.slice(0,8).map(x=>x.id);
+      assert.ok(!input.includes('Test Place'), 'Do not send Google Places data to AI');
+      assert.ok(!input.includes(env.HOME_ADDRESS), 'Do not send home address to AI');
+      const categories=['park','indoor','museum','recreation','library','animals'];
       return response({output:[{type:'message',content:[{type:'output_text',
-        text:JSON.stringify({ids,notes:Object.fromEntries(ids.map(id=>[id,{bring:'Water, jacket',why:'Fun for two kids'}]))})}]}]});
+        text:JSON.stringify({categories,notes:Object.fromEntries(categories.map(cat=>[cat,{bring:'Water, jacket',why:'Fun for two kids'}]))})}]}]});
     }
     if(uri.includes('/media?maxWidthPx=720'))return response({photoUri:'https://lh3.googleusercontent.com/demo'});
-    if(uri.startsWith('https://places.googleapis.com/v1/places/place_'))
-      return response({photos:[{name:'places/place_0_0/photos/demo',authorAttributions:[{displayName:'Photographer',uri:'https://example.org/credit'}]}]});
+    if(uri.startsWith('https://places.googleapis.com/v1/places/place_')) {
+      if(options.headers?.['X-Goog-FieldMask']==='photos,attributions') {
+        return response({photos:[{name:'places/place_0_0/photos/demo',googleMapsUri:'https://maps.google.com/photo-source',
+          authorAttributions:[{displayName:'Photographer',uri:'https://example.org/credit'}]}]});
+      }
+      const id=decodeURIComponent(uri.split('/').pop());
+      return response({id,displayName:{text:'Test Place '+id},formattedAddress:'Ottawa destination',
+        businessStatus:'OPERATIONAL',googleMapsUri:'https://maps.google.com/',websiteUri:'https://example.org',
+        currentOpeningHours:{periods:[{open:{date:{year:2026,month:10,day:1},hour:0,minute:0}}],
+          weekdayDescriptions:['Tuesday: 24 hours']}});
+    }
     throw Error('Unexpected mocked endpoint: '+uri);
   };
   try{
@@ -77,16 +87,27 @@ test('manual generation: Muse, real route threshold, KV persistence, photo attri
     const data=JSON.parse(values.get('family:activities:v1'));
     assert.equal(data.provider,'Muse Spark');
     assert.equal(data.items.length,8);
-    assert.ok(data.items.every(x=>x.km<=20));
+    assert.ok(data.items.every(x=>x.id && x.category && x.bring && x.reason));
+    assert.ok(data.items.every(x=>!x.name&&!x.address&&!x.km&&!x.rating&&!x.openingHours),
+      'Cache must not persist Google Maps content');
     assert.ok(new Set(data.items.map(x=>x.category)).size>=3,'variety must be enforced');
     assert.ok(!JSON.stringify(data).includes(env.HOME_ADDRESS));
     assert.equal(calls.filter(x=>x==='https://api.meta.ai/v1/responses').length,1);
-    const read=await onRequestGet({env});
-    assert.equal((await read.json()).items.length,8);
+    const beforeMuse=calls.filter(x=>x==='https://api.meta.ai/v1/responses').length;
+    const beforeSearch=calls.filter(x=>x==='https://places.googleapis.com/v1/places:searchText').length;
+    const read=await onRequestGet({env,request:new Request('https://dashboard.example.org/api/activities')});
+    assert.equal(read.status,200);
+    const hydrated=await read.json();
+    assert.equal(hydrated.items.length,8);
+    assert.ok(hydrated.items.every(x=>x.name && x.km<=20));
+    assert.equal(calls.filter(x=>x==='https://api.meta.ai/v1/responses').length,beforeMuse,'GET must not invoke AI');
+    assert.equal(calls.filter(x=>x==='https://places.googleapis.com/v1/places:searchText').length,beforeSearch,
+      'GET must not generate new suggestions');
     const p=await photoGet({request:new Request('https://dashboard.example.org/api/activities/photo?placeId='+data.items[0].id),env});
     assert.equal(p.status,200);
     const ph=await p.json();
     assert.equal(ph.credits[0].name,'Photographer');
+    assert.equal(ph.sourceUrl,'https://maps.google.com/photo-source');
     const repeated=await onRequestPost(ctx);
     assert.equal(repeated.status,429);
     const denied=await onRequestPost({...ctx,request:new Request('https://dashboard.example.org/api/activities/generate',{method:'POST',headers:{origin:'https://evil.example','content-type':'application/json'},body:'{}'})});
