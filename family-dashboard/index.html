@@ -96,10 +96,24 @@ async function loadCalendar(view){
  }
 }
 
+// Refresh the page once each Ottawa day after 05:55, before the morning calendar.
+// Store only the last-refresh date, never Google credentials or event content.
+function refreshDaily(p){
+ const min=Number(p.hour)*60+Number(p.minute);
+ if(min<355||min>=1320||manual!=='auto')return;
+ const key='family-dashboard:kiosk-reload-date',today=ottawaDate();
+ try{
+   const previous=localStorage.getItem(key);
+   if(previous===today)return;
+   localStorage.setItem(key,today);
+   if(previous && localStorage.getItem(key)===today)window.location.reload();
+ }catch(e){ /* Storage is optional; the live schedule keeps running. */ }
+}
 function render(){
  const p=parts(),now=Date.now();
  document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';
  if(manual!=='auto'&&now>=manualUntil){manual='auto';manualUntil=0;}
+ refreshDaily(p);
  const selected=manual==='auto'?which(p):manual;
  if(selected!==visible){visible=selected;setUI(selected);}
  if(selected==='calendar'){
