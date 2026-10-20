@@ -98,6 +98,10 @@ test('kiosk schedule unchanged and finance never an automatic mode',async()=>{
    assert.equal(determine({hour,minute}),result,`at ${hour}:${minute}`);
  }
  assert.ok(html.includes('data-mode="finance"'));
+ // Cloudflare Pages serves a copy of index.html at / but JS/CSS live in /family-dashboard/.
+ // Relative finance.js and finance.css paths leave the entire kiosk stage blank.
+ assert.ok(html.includes('src="/family-dashboard/finance.js"'));
+ assert.ok(html.includes('href="/family-dashboard/finance.css"'));
  assert.ok(!html.includes('finance-admin/'));
  assert.ok(!html.includes('378912'));
 });
