@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b31">
-  <title>Kids Morning Weather</title>
+  <title>Kids Morning Weather · Illustrated Wardrobe</title>
   <style>
     :root{
       font-family: system-ui,-apple-system,Arial,sans-serif;
@@ -163,6 +163,52 @@
       display:flex;
       align-items:center;
     }
+
+    /* Illustrated wardrobe cards optimized for Fire HD landscape */
+    .outfit{gap:8px;margin-top:8px}
+    .item{display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;
+      align-items:center;min-height:80px;padding:6px 9px;border-radius:14px;
+      background:#254260;border:1px solid rgba(187,216,243,.12)}
+    .garment-visual{height:68px;width:70px;border-radius:12px;
+      display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(145deg,#f5f3e9,#dce9ec);
+      box-shadow:inset 0 -2px 5px rgba(20,44,64,.13)}
+    .garment-art{height:64px;width:64px;display:block;overflow:visible}
+    .garment-label{font-size:15px;font-weight:700;line-height:1.2;color:#f6faff}
+    .kid{padding:14px}
+    .kidTop{margin-bottom:5px}
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr 1fr}
+      .heroGrid{grid-template-columns:210px 1fr}
+    }
+    @media (max-width: 750px){
+      .grid{grid-template-columns:1fr}
+      .heroGrid{grid-template-columns:1fr}
+      .outfit{grid-template-columns:1fr 1fr}
+    }
+    @media (max-width: 540px){
+      .outfit{grid-template-columns:1fr}
+    }
+    @media (min-width:760px) and (orientation:landscape){
+      body{padding:10px 14px}
+      main{max-width:1450px}
+      header h1{font-size:clamp(26px,3.2vw,39px);margin:2px 0 3px}
+      .hero{margin:8px 0 10px;padding:12px 17px}
+      .heroGrid{grid-template-columns:190px 1fr;gap:14px}
+      .hero .muted[style]{margin-bottom:3px!important;font-size:13px}
+      .big{font-size:53px}
+      .tempIcon{font-size:36px}
+      .rightMeta{gap:3px}
+      .metaTop{font-size:17px}
+      .metaBottom{font-size:14px}
+      .pill{font-size:12px;padding:4px 9px}
+      .grid{gap:10px}
+      .kid h2{font-size:23px}
+      .birthday{font-size:12px}
+      .ageInput{font-size:17px;width:62px;padding:5px 8px}
+      .item{min-height:77px}
+      #refresh{padding:9px 13px;font-size:14px}
+    }
     details{
       margin-top:16px;
       color:#b9c9db;
@@ -184,6 +230,124 @@
   </style>
 </head>
 <body>
+
+<!-- Illustrated wardrobe: local SVG artwork (no external image downloads) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden">
+<defs>
+<symbol id="wear-tshirt" viewBox="0 0 120 120">
+ <path d="M37 20L49 13Q60 24 71 13L83 20 107 43 91 59 79 48 79 104H41V48L29 59 13 43Z" fill="#F8C65C" stroke="#9D6234" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M49 14Q60 31 71 14" fill="none" stroke="#A16333" stroke-width="4"/><path d="M42 40L42 101M78 40L78 101" stroke="#FFF1C9" stroke-width="3" opacity=".6"/>
+ <path d="M49 89Q60 93 72 89" fill="none" stroke="#E89D36" stroke-width="3"/>
+</symbol>
+<symbol id="wear-longshirt" viewBox="0 0 120 120">
+ <path d="M40 19L50 14Q60 24 70 14L80 19 109 68 89 80 79 58V104H41V58L31 80 11 68Z" fill="#9BCCF1" stroke="#417EB4" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M49 14Q60 29 71 14M41 98H79M14 70L32 81M88 81L106 70" fill="none" stroke="#4075A7" stroke-width="3.5"/>
+ <path d="M50 41L49 87M71 41L72 87" stroke="#E6F7FF" stroke-width="3" opacity=".65"/>
+</symbol>
+<symbol id="wear-thermal" viewBox="0 0 120 120">
+ <path d="M40 20L50 13Q60 21 70 13L80 20 108 72 89 83 79 57 79 104H41V57L31 83 12 72Z" fill="#D9B3F8" stroke="#7553AB" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M40 95H80M50 13Q60 27 70 13" fill="none" stroke="#8256B4" stroke-width="3"/><path d="M49 36V93M60 34V93M71 36V93" stroke="#F4E6FF" stroke-width="3" opacity=".7"/>
+</symbol>
+<symbol id="wear-sweater" viewBox="0 0 120 120">
+ <path d="M38 18L50 13Q60 24 70 13L82 18 108 72 88 82 80 59V104H40V59L32 82 12 72Z" fill="#EC7CA5" stroke="#9B3868" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M49 14Q60 30 71 14" fill="none" stroke="#FBD6E8" stroke-width="5"/>
+ <path d="M42 92H78M14 72L33 82M87 82L106 72" stroke="#A64876" stroke-width="6"/>
+ <path d="M50 40L55 48 50 56 55 64 50 72 55 80M70 40L65 48 70 56 65 64 70 72 65 80M60 42V86" fill="none" stroke="#FAD5E7" stroke-width="3"/>
+</symbol>
+<symbol id="wear-hoodie" viewBox="0 0 120 120">
+ <path d="M40 30Q38 10 60 8Q82 10 80 30" fill="#4DBCB0" stroke="#227E79" stroke-width="4"/>
+ <path d="M40 31L47 28 73 28 80 31 108 77 89 86 80 65V105H40V65L31 86 12 77Z" fill="#55C8BB" stroke="#227E79" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M47 29Q60 53 73 29" fill="#D4FFF5" stroke="#217D78" stroke-width="3"/><path d="M55 48V69M65 48V69" stroke="#FFFFD7" stroke-width="3"/>
+ <path d="M48 82Q60 75 72 82L72 98H48Z" fill="#35A89D" stroke="#227E79" stroke-width="2"/>
+</symbol>
+<symbol id="wear-jacket" viewBox="0 0 120 120">
+ <path d="M40 19L50 15 70 15 80 19 108 72 89 83 80 58V105H40V58L31 83 12 72Z" fill="#F49D59" stroke="#A95435" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M50 15L60 40 70 15M60 41V105" fill="none" stroke="#7E503B" stroke-width="4"/>
+ <path d="M45 54H54M66 54H75M45 82H54M66 82H75" stroke="#FDE6B8" stroke-width="3.5" stroke-linecap="round"/>
+ <path d="M41 97H79M14 72L32 82M88 82L106 72" stroke="#BD683D" stroke-width="5"/>
+</symbol>
+<symbol id="wear-parka" viewBox="0 0 120 120">
+ <path d="M36 28Q33 6 60 7Q87 6 84 28L78 36 42 36Z" fill="#F9DAA7" stroke="#BF8D53" stroke-width="4"/>
+ <path d="M40 29L50 30H70L80 29 108 72 89 84 80 67V108H40V67L31 84 12 72Z" fill="#668FD8" stroke="#355994" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M43 35Q60 45 77 35M60 35V107" fill="none" stroke="#E5F0FF" stroke-width="4"/>
+ <path d="M40 54H80M40 73H80M41 92H79" stroke="#3B66B0" stroke-width="4"/>
+ <path d="M47 77H54M66 77H73" stroke="#F8D69D" stroke-width="4"/>
+ <path d="M14 75L31 85M89 85L106 75" stroke="#3A619E" stroke-width="6"/>
+</symbol>
+<symbol id="wear-raincoat" viewBox="0 0 120 120">
+ <path d="M37 30Q35 8 60 7Q85 8 83 30L76 36H44Z" fill="#FBD65F" stroke="#BA8A1D" stroke-width="3"/>
+ <path d="M40 29L48 34 72 34 80 29 107 73 89 84 80 61 85 109H35L40 61 31 84 13 73Z" fill="#FFD84D" stroke="#B98C17" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M59 38V109M37 93H83" stroke="#C79718" stroke-width="3"/>
+ <path d="M45 70H52M68 70H75" stroke="#FFF2B7" stroke-width="5" stroke-linecap="round"/>
+</symbol>
+<symbol id="wear-windbreaker" viewBox="0 0 120 120">
+ <path d="M40 20L50 14H70L80 20 109 70 89 82 79 60V102H41V60L31 82 11 70Z" fill="#89DD85" stroke="#347E56" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M60 19V101M43 56H53M67 56H77" stroke="#F7FFF4" stroke-width="3.5"/><path d="M41 89H79" stroke="#3C9868" stroke-width="5"/>
+ <path d="M42 19L60 38 78 19" fill="none" stroke="#367D56" stroke-width="3"/>
+</symbol>
+<symbol id="wear-pants" viewBox="0 0 120 120">
+ <path d="M33 12H87L84 57 79 108H61L60 63 58 108H39L36 57Z" fill="#5B91D0" stroke="#31557C" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M34 26H86M40 38L49 48M80 38L71 48M58 27L60 64M41 101H57M64 101H78" stroke="#294E76" stroke-width="3" fill="none"/>
+ <path d="M47 15H73" stroke="#B5D8F5" stroke-width="3" opacity=".7"/>
+</symbol>
+<symbol id="wear-snowpants" viewBox="0 0 120 120">
+ <path d="M32 13H88L85 65 80 109H60L59 63 57 109H38L35 64Z" fill="#AF91D9" stroke="#70569B" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M34 26H86M38 53H56M64 53H83M59 27V64M39 97H56M63 97H79" stroke="#E6D9F6" stroke-width="4" fill="none"/>
+ <path d="M42 65V88M76 65V88" stroke="#866AB5" stroke-width="3" stroke-dasharray="5 4"/>
+</symbol>
+<symbol id="wear-shoes" viewBox="0 0 120 120">
+ <path d="M14 59Q21 55 29 59L43 74Q53 81 63 81Q71 86 64 99H12Q7 94 12 84Z" fill="#5EC5C3" stroke="#2E7185" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M58 39Q69 35 77 40L89 55Q100 61 110 62Q118 67 112 79H61Q56 75 58 65Z" fill="#7AAFF2" stroke="#3F69A3" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M13 91H65M61 72H112" stroke="#F5FFFE" stroke-width="6"/><path d="M26 65L37 72M23 72L34 79M73 45L85 54M70 53L82 61" stroke="#F5FFFE" stroke-width="3"/>
+</symbol>
+<symbol id="wear-boots" viewBox="0 0 120 120">
+ <path d="M28 16H59L58 67Q61 75 69 79L73 100H17L20 79 25 67Z" fill="#E5A96A" stroke="#855638" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M70 16H95L94 66Q98 74 106 79L110 100H63L66 78 68 67Z" fill="#C28C61" stroke="#82563B" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M21 87H70M65 87H108M28 30H58M71 30H94" stroke="#F8E3BA" stroke-width="6"/>
+ <path d="M28 49H58M70 49H95" stroke="#A26D45" stroke-width="3"/>
+</symbol>
+<symbol id="wear-hat" viewBox="0 0 120 120">
+ <circle cx="60" cy="19" r="12" fill="#F0B7D5" stroke="#A34C87" stroke-width="3"/>
+ <path d="M24 81Q24 31 60 31Q96 31 96 81Z" fill="#E78BBE" stroke="#A34885" stroke-width="4"/>
+ <path d="M19 77Q60 72 101 77V95Q60 99 19 95Z" fill="#C86CA6" stroke="#8F4176" stroke-width="4"/>
+ <path d="M43 42V73M60 39V72M77 42V73M30 84H89" stroke="#F5D2EA" stroke-width="3" stroke-linecap="round"/>
+</symbol>
+<symbol id="wear-mittens" viewBox="0 0 120 120">
+ <path d="M20 49Q17 30 29 25Q39 21 46 31L53 19Q62 12 69 21L75 33 63 81 39 84Z" fill="#FA9C90" stroke="#AE514D" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M71 54Q69 36 81 29Q94 23 101 35L107 55 98 89 74 88Z" fill="#E87685" stroke="#9F4865" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M36 80L63 78M73 85L99 85" stroke="#FFE2C9" stroke-width="8" stroke-linecap="round"/>
+ <path d="M41 45L34 62M89 45L84 66" stroke="#FCE4DE" stroke-width="3"/>
+</symbol>
+<symbol id="wear-scarf" viewBox="0 0 120 120">
+ <path d="M33 26Q60 11 87 26Q96 42 86 51L74 57 73 104H47L46 58Q22 53 26 38Z" fill="#F3AD5A" stroke="#A96B30" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M29 33Q60 44 89 33M40 53Q62 68 82 53M48 81H73M48 94H73" stroke="#D68A41" stroke-width="5"/>
+ <path d="M48 104V113M57 104V113M67 104V113M74 104V113" stroke="#A96B30" stroke-width="3" stroke-linecap="round"/>
+</symbol>
+<symbol id="wear-shorts" viewBox="0 0 120 120">
+ <path d="M29 21H91L87 81H61L60 52 59 81H33Z" fill="#F1B167" stroke="#A8713E" stroke-width="3.5" stroke-linejoin="round"/>
+ <path d="M30 33H90M33 73H59M61 73H87M59 34L60 53" stroke="#FEE1A7" stroke-width="3.5"/>
+ <path d="M40 41L50 50M81 41L70 50" stroke="#B98443" stroke-width="3"/>
+</symbol>
+<symbol id="wear-sunhat" viewBox="0 0 120 120">
+ <path d="M30 71Q28 28 60 27Q92 28 90 71" fill="#F7CF75" stroke="#B88C43" stroke-width="3.5"/>
+ <path d="M14 75Q60 55 106 75Q118 89 97 92H23Q4 90 14 75Z" fill="#FFE5A7" stroke="#B88C43" stroke-width="3.5"/>
+ <path d="M30 63Q60 74 90 63" stroke="#66ACA0" stroke-width="8" fill="none"/>
+ <circle cx="60" cy="18" r="5" fill="#F6CE75"/>
+</symbol>
+<symbol id="wear-sunscreen" viewBox="0 0 120 120">
+ <path d="M48 20H72V32H48Z" fill="#F3E7D0" stroke="#7B9EA6" stroke-width="3"/>
+ <path d="M43 32H77L83 99Q60 106 37 99Z" fill="#FFF4DB" stroke="#7B9EA6" stroke-width="4" stroke-linejoin="round"/>
+ <path d="M39 53H81V84H39Z" fill="#FAD16F"/><circle cx="60" cy="68" r="10" fill="#F3A94D"/>
+ <path d="M60 53V48M60 88V85M42 68H48M72 68H79M49 58L53 62M67 74L71 78" stroke="#F3A94D" stroke-width="3"/>
+</symbol>
+<symbol id="wear-sandals" viewBox="0 0 120 120">
+ <path d="M16 63Q23 49 43 57Q60 66 55 92Q35 108 17 96Z" fill="#D1A27A" stroke="#896146" stroke-width="3"/>
+ <path d="M61 47Q78 35 100 51Q113 66 102 87Q87 97 66 85Z" fill="#D1A27A" stroke="#896146" stroke-width="3"/>
+ <path d="M18 78Q38 65 55 77M65 65Q82 50 106 66" stroke="#76C4B8" stroke-width="9" fill="none"/>
+ <path d="M22 90Q36 81 51 88M69 77Q85 69 101 76" stroke="#3A918A" stroke-width="6"/>
+</symbol>
+</defs></svg>
+
   <main>
     <header>
       <div>
@@ -469,6 +633,32 @@
       });
     }
 
+
+    // Match each recommended garment with an illustrated paper-doll style drawing.
+    function garmentIllustration(title){
+      const t=title.toLowerCase();
+      if(t.includes('sunscreen')) return 'sunscreen';
+      if(t.includes('snow pants')||t.includes('insulated pants')) return 'snowpants';
+      if(t.includes('pants')||t.includes('leggings')) return 'pants';
+      if(t.includes('shorts')) return 'shorts';
+      if(t.includes('mittens')||t.includes('gloves')) return 'mittens';
+      if(t.includes('neck warmer')||t.includes('scarf')) return 'scarf';
+      if(t.includes('hat')) return t.includes('sun')?'sunhat':'hat';
+      if(t.includes('water bottle')) return 'sunscreen';
+      if(t.includes('boots')||t.includes('boot')) return 'boots';
+      if(t.includes('sandal')) return 'sandals';
+      if(t.includes('shoe')||t.includes('sneaker')) return 'shoes';
+      if(t.includes('rain')) return 'raincoat';
+      if(t.includes('wind-resistant')) return 'windbreaker';
+      if(t.includes('winter coat')||t.includes('snow-ready')||t.includes('insulated winter')) return 'parka';
+      if(t.includes('jacket')||t.includes('coat')) return 'jacket';
+      if(t.includes('hoodie')) return 'hoodie';
+      if(t.includes('fleece')||t.includes('sweater')||t.includes('extra layer')) return 'sweater';
+      if(t.includes('base layer')||t.includes('thermal')) return 'thermal';
+      if(t.includes('long sleeve')) return 'longshirt';
+      return 'tshirt';
+    }
+
     function renderOutfits(){
       if (!forecastData) return;
 
@@ -487,10 +677,29 @@
         const box = $('outfit' + kid.id);
         box.innerHTML = '';
         items.forEach(text => {
-          const div = document.createElement('div');
-          div.className = 'item';
-          div.textContent = text;
-          box.appendChild(div);
+          const label = text.replace(/^[^A-Za-z0-9]+/, '').trim();
+          const artId = garmentIllustration(label);
+          const card = document.createElement('div');
+          card.className = 'item';
+          const visual = document.createElement('div');
+          visual.className = 'garment-visual';
+          const svgNS = 'http://www.w3.org/2000/svg';
+          const drawing = document.createElementNS(svgNS, 'svg');
+          drawing.setAttribute('viewBox', '0 0 120 120');
+          drawing.setAttribute('class', 'garment-art');
+          drawing.setAttribute('role', 'img');
+          drawing.setAttribute('aria-label', label);
+          const use = document.createElementNS(svgNS, 'use');
+          use.setAttribute('href', '#wear-' + artId);
+          use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#wear-' + artId);
+          drawing.appendChild(use);
+          visual.appendChild(drawing);
+          const textNode = document.createElement('span');
+          textNode.className = 'garment-label';
+          textNode.textContent = label;
+          card.appendChild(visual);
+          card.appendChild(textNode);
+          box.appendChild(card);
         });
       });
     }
