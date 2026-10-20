@@ -18,7 +18,7 @@ function authOrigin(request) {
   const site=request.headers.get('sec-fetch-site');
   return origin===new URL(request.url).origin && (!site||site==='same-origin');
 }
-async function originPoint(env) {
+export async function originPoint(env) {
   const u=new URL('https://maps.googleapis.com/maps/api/geocode/json');
   u.searchParams.set('address',env.HOME_ADDRESS);
   u.searchParams.set('key',env.GOOGLE_MAPS_API_KEY);
@@ -27,7 +27,7 @@ async function originPoint(env) {
   if(r.status!=='OK'||!first?.geometry?.location)throw Error('Home address could not be geocoded');
   return first.geometry.location;
 }
-async function forecast(origin) {
+export async function forecast(origin) {
   const u=new URL('https://api.open-meteo.com/v1/forecast');
   Object.entries({latitude:String(origin.lat),longitude:String(origin.lng),
     hourly:'temperature_2m,precipitation_probability,wind_speed_10m',timezone:ZONE,forecast_days:'2'})
@@ -53,7 +53,7 @@ async function findPlaces(key,origin) {
   if(dedup.size<4)throw Error('Not enough verified places from Google Places');
   return [...dedup.values()].slice(0,45);
 }
-async function routes(key,origin,places) {
+export async function routes(key,origin,places) {
   const data=await getJSON('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix',{
     method:'POST',
     headers:{'content-type':'application/json','X-Goog-Api-Key':key,
@@ -69,12 +69,12 @@ async function routes(key,origin,places) {
   }
   return map;
 }
-function openingLabel(place) {
+export function openingLabel(place) {
   const hours=place.currentOpeningHours;
   if(!Array.isArray(hours?.weekdayDescriptions))return 'Hours unverified';
   return hours.weekdayDescriptions.join(' · ').slice(0,400);
 }
-function scheduleFor(place,drive,date,earliest,busy,hours) {
+export function scheduleFor(place,drive,date,earliest,busy,hours) {
   const duration=place.category==='museum'?95:75;
   let best=null;
   for(let t=earliest;t+2*drive+duration<=20*60;t+=30) {
