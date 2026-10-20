@@ -10,7 +10,7 @@ const baseHeaders={
  "x-frame-options":"DENY"
 };
 export function json(data,status=200,extra={}){return new Response(JSON.stringify(data),{status,headers:{...baseHeaders,...extra}});}
-export function unavailable(env){return !env.FINANCE_KV||!env.FINANCE_PIN||!env.FINANCE_ADMIN_PASSWORD||!env.FINANCE_SESSION_SECRET||String(env.FINANCE_SESSION_SECRET).length<32||String(env.FINANCE_ADMIN_PASSWORD).length<12;}
+export function unavailable(env){return !env.FINANCE_KV||!/^\d{6}$/.test(String(env.FINANCE_PIN||''))||!env.FINANCE_SESSION_SECRET||String(env.FINANCE_SESSION_SECRET).length<32;}
 export function sameOrigin(request){
  const origin=request.headers.get("origin");
  return !!origin && origin===new URL(request.url).origin
