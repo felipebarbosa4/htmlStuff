@@ -18,6 +18,6 @@ export async function onRequestGet({request,env}) {
     if(!/^https:\/\//.test(media.photoUri||''))return json({error:'Invalid photo media URL'},502);
     const credits=(photo.authorAttributions||[]).map(x=>({name:String(x.displayName||'Photographer').slice(0,80),
       uri:/^https:\/\//.test(x.uri||'')?x.uri:''})).slice(0,4);
-    return json({url:media.photoUri,credits});
+    return json({url:media.photoUri,credits,sourceUrl:/^https:\/\//.test(photo.googleMapsUri||'')?photo.googleMapsUri:''});
   }catch{return json({error:'Photo temporarily unavailable'},502);}
 }
