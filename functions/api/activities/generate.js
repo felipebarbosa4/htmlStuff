@@ -140,25 +140,29 @@ export async function onRequestPost(context) {
     if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
     await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(Date.now()),{expirationTtl:120});
     const now=local();
-    const targetDate=now.minute>=1200?addDay(now.date):now.date;
-    const day=local(new Date(targetDate+'T12:00:00Z')).weekday;
-    const schoolDay=!['Sat','Sun'].includes(day);
-    const earliest=targetDate===now.date?Math.max(now.minute+15,schoolDay?930:540):(schoolDay?930:540);
-    const url=new URL(request.url);url.pathname='/api/calendar';url.searchParams.set('date',targetDate);
-    const [home,cal]=await Promise.all([
-      originPoint(env),calendarGet({...context,request:new Request(url.toString(),{method:'GET'})})
-    ]);
-    if(!cal.ok)throw Error('Google Calendar is unavailable; cannot safely avoid appointments');
-    const agenda=await cal.json();
-    if(agenda.partial)throw Error('One or more calendars could not be checked');
-    const blocked=ranges(agenda.events,targetDate);
-    if(blocked.some(([a,b])=>a===0&&b===1440))return json({error:'Calendar has an all-day commitment on the selected day.'},409);
+    let targetDate=now.minute>=1200?addDay(now.date):now.date;
+    const earliestFor=date=>{
+      const day=local(new Date(date+'T12:00:00Z')).weekday;
+      const minimum=['Sat','Sun'].includes(day)?540:930;
+      return date===now.date?Math.max(now.minute+15,minimum):minimum;
+    };
+    const agendaFor=async date=>{
+      const u=new URL(request.url);u.pathname='/api/calendar';u.searchParams.set('date',date);
+      const r=await calendarGet({...context,request:new Request(u.toString(),{method:'GET'})});
+      if(!r.ok)throw Error('Google Calendar is unavailable; cannot safely avoid appointments');
+      const data=await r.json();
+      if(data.partial)throw Error('One or more calendars could not be checked');
+      return ranges(data.events,date);
+    };
+    const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
+    if(firstBusy.some(([a,b])=>a===0&&b===1440))
+      return json({error:'Calendar has an all-day commitment on the selected day.'},409);
     const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home)]);
     const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
-    const pool=places.map((p,i)=>{
+    const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
       const route=distances.get(i);
       if(!route||route.km>MAX_KM||!Number.isFinite(route.minutes))return null;
-      const schedule=scheduleFor(p,route.minutes,targetDate,earliest,blocked,weather);
+      const schedule=scheduleFor(p,route.minutes,date,earliest,blocked,weather);
       if(!schedule)return null;
       return {id:p.id,name:p.displayName?.text||'Activity',category:p.category,
         address:p.formattedAddress||'',km:Math.round(route.km*10)/10,driveMinutes:route.minutes,
@@ -169,7 +173,17 @@ export async function onRequestPost(context) {
         penalty:schedule.penalty,attributions:(p.attributions||[]).map(x=>({provider:x.provider||'',uri:x.providerUri||''})),
         score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};
     }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,26);
-    if(pool.length<4)throw Error('Fewer than four suitable places with verified driving distances and time slots');
+    let pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
+    if(pool.length<4 && targetDate===now.date) {
+      // If it is too late for a realistic outing, use tomorrow's free hours
+      // without charging again for Places/Routes searches.
+      const tomorrow=addDay(targetDate),tomorrowBusy=await agendaFor(tomorrow);
+      if(!tomorrowBusy.some(([a,b])=>a===0&&b===1440)){
+        const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
+        if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
+      }
+    }
+    if(pool.length<4)throw Error('Fewer than four suitable places with verified driving distances and free time slots');
     const choice=await selectWithAI(env,pool,targetDate,weather.filter(x=>x.time.startsWith(targetDate)).slice(0,12)
       .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '));
     const byId=new Map(pool.map(x=>[x.id,x]));
