@@ -6,7 +6,7 @@
 <title>Family Smart Dashboard</title>
 <style>
 :root{font-family:system-ui,-apple-system,Arial,sans-serif;color:#eef6ff;background:#091424}*{box-sizing:border-box}html,body{margin:0;min-height:100%;}body{display:flex;flex-direction:column;min-height:100vh}.top{padding:12px 18px;display:flex;gap:16px;align-items:center;justify-content:space-between;border-bottom:1px solid #344660;background:#12243b;flex-wrap:wrap}.brand{font-size:18px;font-weight:800}.small{color:#adc0d5;font-size:14px}.controls{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.controls button{border:1px solid #53728e;color:#d4e8ff;background:#1e3552;padding:9px 12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}.controls button.current{color:#062323;background:#73eadb;border-color:#73eadb}#stage{position:relative;flex:1;min-height:65vh}#frame{width:100%;height:calc(100vh - 74px);border:0;background:#091424}.view{padding:clamp(20px,4vw,52px);max-width:1200px;margin:auto}.big{font-size:clamp(33px,6vw,70px);margin:10px 0}.card{border-radius:22px;border:1px solid #405b7a;background:#19304c;padding:25px;max-width:800px;margin:20px 0}.dim{color:#b4c8df}.clock{font-size:clamp(44px,10vw,120px);font-weight:800;font-variant-numeric:tabular-nums}.notice{border-left:4px solid #73eadb;padding:12px 16px;background:#193047}.actions a{display:inline-block;color:#092527;background:#73eadb;padding:14px 18px;border-radius:12px;text-decoration:none;font-weight:800}.hint{line-height:1.7}.foot{font-size:13px;color:#b4c8df;margin-top:20px}@media(max-width:750px){.top{padding:10px}.controls button{padding:9px}#frame{height:calc(100vh - 116px)}}
-.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
+.next-up{position:sticky;top:0;z-index:5;min-height:160px;margin:16px 0;padding:18px 22px;border:2px solid #73eadb;border-radius:20px;background:#1b3a55;box-shadow:0 4px 20px #0005}.next-label{font-size:16px;letter-spacing:.1em;color:#8ff6e5;font-weight:800}.next-title{font-size:clamp(24px,4vw,44px);font-weight:800;line-height:1.2;margin:8px 0}.next-meta{font-size:clamp(15px,2vw,22px);font-weight:700}.next-countdown{font-size:18px;color:#9af2e1;font-weight:800;margin-top:8px}.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
 </style></head>
 <body>
 <header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button></nav></header>
@@ -14,7 +14,8 @@
 <script>
 'use strict';
 const TZ='America/Toronto';const BASE='../kids-weather-panel/?v=5';
-let manual='auto', visible='';
+let manual='auto',visible='',manualUntil=0,calendarEvents=[],calendarUpcoming=[],calendarLoaded=false;
+const MANUAL_DURATION=30*60*1000;
 function parts(){const s=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',weekday:'short',month:'short',day:'numeric'}).formatToParts(new Date());return Object.fromEntries(s.filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
 // Automatic schedule in Ottawa local time: night 22:00–06:00, clothes 08:00–08:50, calendar otherwise.
 function which(p){const min=Number(p.hour)*60+Number(p.minute);if(min>=1320||min<360)return 'night';if(min>=480&&min<530)return 'weather';return 'calendar';}
@@ -22,7 +23,7 @@ function setUI(mode){
 const el=document.getElementById('stage');el.replaceChildren();
 if(mode==='weather'){const f=document.createElement('iframe');f.id='frame';f.src=BASE+'&refresh='+Date.now();f.title='Children clothing recommendations for Ottawa';el.appendChild(f);return;}
 const view=document.createElement('section');view.className='view';el.appendChild(view);
-if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Today\'s calendar</h1><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars in the authorized Google account · Refreshes every 10 minutes</p>';loadCalendar(view);}
+if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Family calendar</h1><div class="next-up" aria-label="Next appointment"><div class="next-label">⏭ NEXT UP</div><div class="next-title" id="next-title">Finding your next appointment…</div><div class="next-meta" id="next-meta"></div><div class="next-countdown" id="next-countdown"></div></div><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars · Updates every 10 minutes</p>';calendarLoaded=false;loadCalendar(view);}
 else view.innerHTML='<div class="small">NIGHT MODE · 22:00–06:00</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good night!</h1><p class="dim">Your family schedule returns automatically at 6:00 AM.</p>';
 }
 
@@ -35,6 +36,21 @@ function ottawaDate(){
 function eventTime(date){
  const d=new Date(date);
  return Number.isFinite(d.valueOf())?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(d):'Time unavailable';
+}
+function updateNextUp(now=Date.now()){
+ if(!calendarLoaded||visible!=='calendar')return;
+ const title=document.getElementById('next-title'),meta=document.getElementById('next-meta'),countdown=document.getElementById('next-countdown');
+ if(!title||!meta||!countdown)return;
+ const timed=[...calendarEvents,...calendarUpcoming]
+   .filter(e=>!e.allDay&&Number.isFinite(Date.parse(e.start))&&Date.parse(e.start)>now)
+   .sort((a,b)=>Date.parse(a.start)-Date.parse(b.start));
+ const next=timed[0];
+ if(!next){title.textContent='No upcoming appointments found';meta.textContent='No timed appointments found in the next 30 days.';countdown.textContent='';return;}
+ const t=Date.parse(next.start),minutes=Math.max(0,Math.ceil((t-now)/60000));
+ title.textContent=next.title||'Busy';
+ meta.textContent=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(t)+' · '+(next.calendar||'Calendar')+(next.location?' · '+next.location:'');
+ const hours=Math.floor(minutes/60),days=Math.floor(hours/24);
+ countdown.textContent=minutes<60?'In '+minutes+' min':hours<24?'In '+hours+' hr'+(minutes%60?' '+minutes%60+' min':''):'In '+days+' day(s)'+(hours%24?' '+hours%24+' hr':'');
 }
 async function loadCalendar(view){
  if(!view?.isConnected || visible!=='calendar')return;
@@ -50,8 +66,12 @@ async function loadCalendar(view){
    const data=await resp.json();
    if(!resp.ok)throw Error(data.error||'Calendar API unavailable');
    if(!view.isConnected || visible!=='calendar')return;
+   calendarEvents=Array.isArray(data.events)?data.events:[];
+   calendarUpcoming=Array.isArray(data.upcomingEvents)?data.upcomingEvents:[];
+   calendarLoaded=true;
+   updateNextUp();
    info.textContent=data.eventCount+' event'+(data.eventCount===1?'':'s')+' today · '+data.calendarCount+' calendars'+(data.partial?' · Some calendars could not be loaded':'');
-   const events=data.events||[];
+   const events=calendarEvents.filter(e=>e.allDay || Date.parse(e.end||e.start)>Date.now());
    if(!events.length){const b=document.createElement('div');b.className='agenda-empty';b.textContent='No appointments today. Enjoy your free time!';target.appendChild(b);return;}
    let placedAllDay=false,placedTimed=false;
    for(const event of events){
@@ -68,14 +88,31 @@ async function loadCalendar(view){
  }catch(e){
    if(!view.isConnected || visible!=='calendar')return;
    info.textContent='Calendar connection needs attention';
+   calendarLoaded=false;
+   const nextTitle=document.getElementById('next-title');if(nextTitle)nextTitle.textContent='Calendar unavailable — retrying automatically';
    const b=document.createElement('div');b.className='agenda-empty';
    b.textContent=e.message+'. The dashboard remains private; no calendar data has been published.';
    target.appendChild(b);
  }
 }
 
-function render(){const p=parts();document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';const selected=manual==='auto'?which(p):manual;if(selected!==visible){visible=selected;setUI(selected)}if(selected==='calendar' && Date.now()-calendarUpdatedAt>10*60*1000){const v=document.querySelector('#stage .view');if(v)loadCalendar(v);}const c=document.getElementById('large-clock');if(c)c.textContent=p.hour+':'+p.minute;for(const b of document.querySelectorAll('[data-mode]')){b.classList.toggle('current',b.dataset.mode===manual);b.setAttribute('aria-pressed',String(b.dataset.mode===manual));}}
-for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('click',()=>{manual=b.dataset.mode;visible='';render()});
+function render(){
+ const p=parts(),now=Date.now();
+ document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';
+ if(manual!=='auto'&&now>=manualUntil){manual='auto';manualUntil=0;}
+ const selected=manual==='auto'?which(p):manual;
+ if(selected!==visible){visible=selected;setUI(selected);}
+ if(selected==='calendar'){
+   if(now-calendarUpdatedAt>10*60*1000){const v=document.querySelector('#stage .view');if(v)loadCalendar(v);}
+   updateNextUp(now);
+ }
+ const c=document.getElementById('large-clock');if(c)c.textContent=p.hour+':'+p.minute;
+ for(const b of document.querySelectorAll('[data-mode]')){b.classList.toggle('current',b.dataset.mode===manual);b.setAttribute('aria-pressed',String(b.dataset.mode===manual));}
+}
+for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('click',()=>{
+ manual=b.dataset.mode;manualUntil=manual==='auto'?0:Date.now()+MANUAL_DURATION;
+ visible='';render();
+});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
 setInterval(render,15000);render();
 </script>
