@@ -230,6 +230,31 @@
       .metaTop,.metaBottom{gap:10px}
       .tempBlock{flex-wrap:wrap}
     }
+
+    .day-breakdown{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+    .forecast-slice{background:#10283e;border:1px solid #3b5470;border-radius:9px;
+      padding:5px 9px;font-size:12px;color:#dfeaf7}
+    .forecast-slice b{color:#7de9d5;display:block}
+    .cold-warning{padding:8px;background:#603f21;border-left:4px solid #f7d47b;
+      border-radius:8px;color:#fff0d5;margin-top:6px}
+    .wear-section{margin-top:10px}
+    .wear-heading{font-size:15px;font-weight:800;margin:3px 0 5px;color:#7ee8d5}
+    .wear-tip{font-size:12px;color:#bbd2e7;line-height:1.3;margin:0 0 6px}
+    .wear-section .outfit{margin-top:3px}
+    .item{min-height:65px;grid-template-columns:60px minmax(0,1fr)}
+    .garment-visual{width:58px;height:58px}
+    .garment-art{width:60px;height:60px}
+    .garment-label{font-size:14px}
+    @media (min-width:760px) and (orientation:landscape){
+      .hero{padding:9px 14px}
+      .kid{padding:11px}
+      .day-breakdown{gap:5px}
+      .forecast-slice{font-size:11px}
+      .wear-heading{font-size:13px}
+      .wear-tip{font-size:11px}
+      .wear-section{margin-top:7px}
+      .item{min-height:63px}
+    }
   </style>
 </head>
 <body>
@@ -354,7 +379,7 @@
   <main>
     <header>
       <div>
-        <div class="muted">OTTAWA, ONTARIO · MORNING ROUTINE</div>
+        <div class="muted">OTTAWA, ONTARIO · DAILY OUTFITS</div>
         <h1>☀️ What should we wear today?</h1>
         <div class="muted" id="date">Getting today's forecast…</div>
       </div>
@@ -362,7 +387,7 @@
     </header>
 
     <section class="hero" aria-live="polite">
-      <div class="muted" style="margin-bottom:10px;">Forecast for the school morning (8–9 AM)</div>
+      <div id="forecastPeriod" class="muted" style="margin-bottom:6px;">Forecast for outdoor time at school and weekends</div>
       <div class="heroGrid">
         <div class="tempBlock">
           <div class="big" id="weather">Loading…</div>
@@ -378,7 +403,7 @@
             <div id="windInfo">Wind --</div>
             <div id="summary">Checking forecast…</div>
           </div>
-          <div id="status" class="pill">Checking live Ottawa forecast…</div>
+          <div id="status" class="pill">Checking live Ottawa forecast…</div><div class="day-breakdown" id="dayBreakdown"></div><div id="weatherAdvisory" class="cold-warning" hidden></div>
         </div>
       </div>
     </section>
@@ -415,12 +440,12 @@
 
     <details>
       <summary>About the recommendations</summary>
-      <p>Suggestions use Ottawa's school-morning forecast (8–9 AM), especially feels-like temperature, precipitation chance, wind, and general weather conditions. They are practical layering suggestions, not medical or safety advice.</p>
+      <p>Weekdays consider 8 AM to 4 PM including school indoor time, a 40–60 minute outdoor recess (exact time unknown) and the 3:30 PM bus. Outdoor layers should be taken off in heated classrooms. Weekends show daytime outdoor suggestions when the page is opened. These are approximate rules, not medically validated clothing prescriptions; check school weather policies.</p>
       <p>Age settings are saved only on this device. Weather data comes from Open-Meteo.</p>
     </details>
 
     <footer>
-      Auto refresh every 15 minutes while open. If the tablet wakes the page at 8:00 AM, the forecast refreshes again.
+      Refreshes every 15 minutes while open, and when revisited or touched after 10 minutes. Weekend forecasts work on demand. Official weather alerts are not included.
     </footer>
   </main>
 
@@ -540,82 +565,83 @@
       return '🌡️';
     }
 
-    function recommendations(feels, rain, wind, code, age){
-      const snowing = [71,73,75,77,85,86].includes(code);
-      let items = [];
-
-      if (feels <= -15) {
-        items = [
-          '🧦 Thermal base layer',
-          '👕 Warm fleece or sweater',
-          '🧥 Insulated winter coat',
-          '👖 Snow pants / insulated pants',
-          '🥾 Insulated winter boots',
-          '🧤 Warm mittens',
-          '🧢 Warm hat',
-          '🧣 Neck warmer'
-        ];
-      } else if (feels <= -5) {
-        items = [
-          '👕 Long-sleeve base layer',
-          '🧶 Warm sweater or fleece',
-          '🧥 Winter coat',
-          '👖 Warm pants',
-          '🥾 Warm waterproof boots',
-          '🧤 Mittens',
-          '🧢 Warm hat'
-        ];
-      } else if (feels <= 3) {
-        items = [
-          '👕 Long sleeves',
-          '🧶 Sweater or fleece',
-          '🧥 Warm jacket',
-          '👖 Long pants',
-          '👟 Closed shoes or boots',
-          '🧢 Light hat if needed'
-        ];
-      } else if (feels <= 10) {
-        items = [
-          '👕 Long sleeves or tee',
-          '🧥 Light jacket or hoodie',
-          '👖 Long pants',
-          '👟 Sneakers',
-          '🧢 Optional light hat'
-        ];
-      } else if (feels <= 18) {
-        items = [
-          '👕 T-shirt',
-          '🧥 Hoodie or light layer',
-          '👖 Pants or leggings',
-          '👟 Sneakers'
-        ];
-      } else {
-        items = [
-          '👕 T-shirt',
-          '🩳 Shorts or light pants',
-          '👟 Sneakers or sandals',
-          '🧴 Sunscreen / hat if sunny'
-        ];
+    // Approximate guidelines only; warm classrooms and active recess require removable layers.
+    function isRain(c){return [51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99].includes(c)}
+    function isSnow(c){return [71,73,75,77,85,86].includes(c)}
+    function weatherStats(list){
+      if(!list.length)throw Error('No forecast hours');
+      const values=(k)=>list.map(x=>x[k]);
+      return {tempMin:Math.min(...values('temp')),tempMax:Math.max(...values('temp')),
+        cold:Math.min(...values('feels')),warm:Math.max(...values('feels')),
+        wet:list.some(x=>isRain(x.code)||x.precip>=0.3),
+        snow:list.some(x=>isSnow(x.code)||x.snowfall>=0.1||x.snowDepth>=0.025),
+        chance:Math.max(...values('rain')),wind:Math.max(...values('wind')),
+        uv:Math.max(...values('uv'))};
+    }
+    function selectedPeriod(){
+      const current=new Date(),today=dateParts(current);
+      const hour=Number(new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'2-digit',hourCycle:'h23'})
+        .formatToParts(current).find(x=>x.type==='hour').value);
+      let date=today;
+      let weekday=new Date(today+'T12:00:00Z').getUTCDay();
+      // After hours, show next day as a preview.
+      if((weekday!==0&&weekday!==6&&hour>=17)||((weekday===0||weekday===6)&&hour>=19)){
+        const next=new Date(today+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);
+        date=next.toISOString().slice(0,10);weekday=next.getUTCDay();
       }
-
-      if (rain >= 40 || [61,63,65,80,81,82].includes(code)) {
-        items.push('☔ Rain jacket');
-        items.push('👢 Waterproof shoes / boots');
+      const weekend=weekday===0||weekday===6;
+      return {date,weekend,start:weekend?(date===today?Math.min(Math.max(hour,9),18):9):8,end:weekend?19:16};
+    }
+    function chooseClothes(day,age){
+      const q=day.weekend?day.all:day.recess;
+      const indoor=[],outdoor=[];
+      const add=(list,name,tag)=>list.push({name,tag});
+      add(indoor,q.cold<=3?'Light long sleeves':'T-shirt',day.weekend?'BASE':'WEAR IN CLASS');
+      add(indoor,q.warm>=24?'Light pants or shorts':'Comfortable pants',day.weekend?'BOTTOMS':'WEAR IN CLASS');
+      if(!day.weekend)add(indoor,'Indoor sneakers','WEAR IN CLASS');
+      const wet=q.wet||q.chance>=50,snow=q.snow;
+      const cold=q.cold;
+      if(cold<=-12){
+        add(outdoor,'Insulated winter coat','FOR OUTDOORS');
+        add(outdoor,'Snow pants for recess','FOR OUTDOORS');
+        add(outdoor,'Warm waterproof boots','FOR OUTDOORS');
+        add(outdoor,'Warm mittens','FOR OUTDOORS');
+        add(outdoor,'Warm hat covering ears','FOR OUTDOORS');
+        add(outdoor,'Fleece, if needed','OPTIONAL LAYER');
+      }else if(cold<=-5){
+        add(outdoor,wet?'Water-resistant winter coat':'Winter coat','FOR OUTDOORS');
+        add(outdoor,'Warm waterproof boots','FOR OUTDOORS');
+        add(outdoor,'Mittens + warm hat','FOR OUTDOORS');
+        if(snow)add(outdoor,'Snow pants for recess','FOR OUTDOORS');
+        add(outdoor,'Fleece if still cold','OPTIONAL LAYER');
+      }else if(cold<=3){
+        add(outdoor,wet?'Water-resistant warm jacket':'Warm removable jacket','FOR OUTDOORS');
+        add(outdoor,snow?'Waterproof boots':'Closed shoes or boots','FOR OUTDOORS');
+        if(snow)add(outdoor,'Snow pants for recess','FOR OUTDOORS');
+        add(outdoor,'Light hat + gloves if cold','OPTIONAL');
+      }else if(cold<=10){
+        add(outdoor,wet?'Waterproof light jacket':'Light jacket or hoodie','FOR OUTDOORS');
+        add(outdoor,wet?'Waterproof shoes':'Sneakers','FOR OUTDOORS');
+      }else if(cold<=16){
+        if(wet)add(outdoor,'Light rain jacket','PACK FOR RAIN');
+        else add(outdoor,'Light hoodie if chilly','OPTIONAL');
+        add(outdoor,'Sneakers','FOR OUTDOORS');
+      }else{
+        add(outdoor,'Sneakers','FOR OUTDOORS');
+        if(q.warm>=24)add(outdoor,'Sun hat + water bottle','FOR OUTDOORS');
       }
-
-      if (snowing) {
-        items.push('❄️ Snow-ready outer layer');
-      }
-
-      if (wind >= 25) {
-        items.push('🌬️ Wind-resistant outer layer');
-      }
-
-      if (age <= 4 && feels <= 5) {
-        items.push('🧣 Extra layer for younger child');
-      }
-
-      return [...new Set(items)];
+      if(snow&&cold>3)add(outdoor,'Waterproof boots if snow','FOR SNOW');
+      if(wet&&cold<=3&&!outdoor.some(x=>x.name.includes('waterproof')||x.name.includes('Waterproof')))
+        add(outdoor,'Waterproof shoes / boots','FOR WET WEATHER');
+      if(q.wind>=30&&cold>10&&!outdoor.some(x=>/jacket|coat|hoodie/i.test(x.name)))
+        add(outdoor,'Wind-resistant layer','OPTIONAL / WIND');
+      if(q.uv>=3)add(outdoor,'Sunscreen for exposed skin','OUTDOOR SUN');
+      if(age<=5&&cold<=3)add(outdoor,'Check hat + gloves fit','CHECK COMFORT');
+      return {indoor,outdoor,
+        tip:day.weekend?'Adjust removable outerwear for activity and time outdoors.':
+          'Put on outdoor gear for recess (~40–60 min) and bus stops. REMOVE coats and extra layers in warm classrooms.',
+        warning:q.cold<=-27?'Extreme cold: check school policy and weather alerts before outdoor play.':
+          q.cold<=-15?'Very cold for long recess: follow school outdoor-play policy.':''};
     }
 
     let forecastData = null;
@@ -676,55 +702,47 @@
       return 'Extra for the weather';
     }
 
+    function outfitCard(item){
+      const card=document.createElement('div');card.className='item';
+      const visual=document.createElement('div');visual.className='garment-visual';
+      const svgNS='http://www.w3.org/2000/svg';
+      const drawing=document.createElementNS(svgNS,'svg');
+      drawing.setAttribute('viewBox','0 0 120 120');
+      drawing.setAttribute('class','garment-art');
+      drawing.setAttribute('role','img');drawing.setAttribute('aria-label',item.name);
+      const use=document.createElementNS(svgNS,'use');
+      use.setAttribute('href','#wear-'+garmentIllustration(item.name));
+      use.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#wear-'+garmentIllustration(item.name));
+      drawing.appendChild(use);visual.appendChild(drawing);
+      const wrap=document.createElement('div');wrap.className='garment-text';
+      const role=document.createElement('span');role.className='wear-role';role.textContent=item.tag;
+      const title=document.createElement('span');title.className='garment-label';title.textContent=item.name;
+      wrap.append(role,title);card.append(visual,wrap);return card;
+    }
+    function outfitGroup(title,tip,items){
+      const sec=document.createElement('section');sec.className='wear-section';
+      const heading=document.createElement('h3');heading.className='wear-heading';heading.textContent=title;
+      sec.appendChild(heading);
+      if(tip){const p=document.createElement('p');p.className='wear-tip';p.textContent=tip;sec.appendChild(p);}
+      const group=document.createElement('div');group.className='outfit';
+      items.forEach(i=>group.appendChild(outfitCard(i)));
+      sec.appendChild(group);return sec;
+    }
     function renderOutfits(){
-      if (!forecastData) return;
-
-      kids.forEach(kid => {
-        const age = Math.max(1, Math.min(17, Number($('age' + kid.id).value) || kid.defaultAge));
-        $('name' + kid.id).textContent = `${kid.emoji} ${kid.name} · Age ${age}`;
-
-        const items = recommendations(
-          forecastData.feels,
-          forecastData.rain,
-          forecastData.wind,
-          forecastData.code,
-          age
+      if(!forecastData)return;
+      kids.forEach(kid=>{
+        const age=Math.max(1,Math.min(17,Number($('age'+kid.id).value)||kid.defaultAge));
+        const clothes=chooseClothes(forecastData,age);
+        $('name'+kid.id).textContent=kid.emoji+' '+kid.name+' · Age '+age;
+        const container=$('outfit'+kid.id);container.className='wardrobe';
+        container.replaceChildren(
+          outfitGroup(forecastData.weekend?'👕 Base clothes':'🏫 INSIDE school',null,clothes.indoor),
+          outfitGroup(forecastData.weekend?'🌤️ ADD outdoors':'🌲 ADD for recess + bus',clothes.tip,clothes.outdoor)
         );
-
-        const box = $('outfit' + kid.id);
-        box.innerHTML = '';
-        items.forEach(text => {
-          const label = text.replace(/^[^A-Za-z0-9]+/, '').trim();
-          const artId = garmentIllustration(label);
-          const card = document.createElement('div');
-          card.className = 'item';
-          const visual = document.createElement('div');
-          visual.className = 'garment-visual';
-          const svgNS = 'http://www.w3.org/2000/svg';
-          const drawing = document.createElementNS(svgNS, 'svg');
-          drawing.setAttribute('viewBox', '0 0 120 120');
-          drawing.setAttribute('class', 'garment-art');
-          drawing.setAttribute('role', 'img');
-          drawing.setAttribute('aria-label', label);
-          const use = document.createElementNS(svgNS, 'use');
-          use.setAttribute('href', '#wear-' + artId);
-          use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#wear-' + artId);
-          drawing.appendChild(use);
-          visual.appendChild(drawing);
-          const textWrap = document.createElement('div');
-          textWrap.className = 'garment-text';
-          const role = document.createElement('span');
-          role.className = 'wear-role';
-          role.textContent = clothingRole(label);
-          const textNode = document.createElement('span');
-          textNode.className = 'garment-label';
-          textNode.textContent = label;
-          textWrap.appendChild(role);
-          textWrap.appendChild(textNode);
-          card.appendChild(visual);
-          card.appendChild(textWrap);
-          box.appendChild(card);
-        });
+        if(clothes.warning){
+          const warning=document.createElement('p');warning.className='cold-warning';
+          warning.textContent=clothes.warning;container.appendChild(warning);
+        }
       });
     }
 
@@ -748,76 +766,81 @@
       });
     });
 
+    let lastFetchAt=0;
+    const showTemp=n=>Math.round(n)+'°C';
+    function dayCard(title,list){
+      if(!list.length)return null;
+      const stat=weatherStats(list);
+      const card=document.createElement('div');card.className='forecast-slice';
+      const strong=document.createElement('b');strong.textContent=title;card.appendChild(strong);
+      card.appendChild(document.createTextNode(showTemp(stat.tempMin)+'–'+showTemp(stat.tempMax)+
+        ' · feels down to '+showTemp(stat.cold)));
+      return card;
+    }
     async function loadWeather(){
-      $('date').textContent = formatLongDate(new Date());
-      $('status').textContent = 'Checking live Ottawa forecast…';
-
-      const url =
-        'https://api.open-meteo.com/v1/forecast' +
-        '?latitude=' + LAT +
-        '&longitude=' + LON +
-        '&hourly=temperature_2m,apparent_temperature,precipitation_probability,wind_speed_10m,weather_code' +
-        '&timezone=America%2FToronto&forecast_days=2';
-
-      try {
-        const ctrl = new AbortController();
-        const timeout = setTimeout(() => ctrl.abort(), 15000);
-
-        const res = await fetch(url, { signal: ctrl.signal });
-        clearTimeout(timeout);
-
-        if (!res.ok) throw new Error('Forecast request failed');
-
-        const json = await res.json();
-
-        const times = json.hourly.time;
-        const temps = json.hourly.temperature_2m;
-        const feels = json.hourly.apparent_temperature;
-        const rain = json.hourly.precipitation_probability;
-        const wind = json.hourly.wind_speed_10m;
-        const codes = json.hourly.weather_code;
-
-        const today = dateParts(new Date());
-        const candidates = [];
-
-        for (let i = 0; i < times.length; i++) {
-          if (!times[i].startsWith(today)) continue;
-          const hour = Number(times[i].slice(11, 13));
-          if (hour >= 8 && hour <= 9) {
-            candidates.push({
-              temp: temps[i],
-              feels: feels[i],
-              rain: rain[i],
-              wind: wind[i],
-              code: codes[i]
-            });
-          }
-        }
-
-        const chosen = candidates[0] || {
-          temp: temps[0],
-          feels: feels[0],
-          rain: rain[0],
-          wind: wind[0],
-          code: codes[0]
-        };
-
-        forecastData = chosen;
-
-        $('weather').textContent = `${Math.round(chosen.temp)}°C`;
-        $('weatherIcon').textContent = weatherIcon(chosen.code);
-        $('feelsLike').textContent = `Feels like ${Math.round(chosen.feels)}°C`;
-        $('updated').textContent = `Updated ${formatShortTime(new Date())}`;
-        $('rainChance').textContent = `Rain/snow chance ${Math.round(chosen.rain)}%`;
-        $('windInfo').textContent = `Wind ${Math.round(chosen.wind)} km/h`;
-        $('summary').textContent = weatherSummary(chosen.code);
-        $('status').textContent = 'Live forecast loaded';
-
+      lastFetchAt=Date.now();
+      $('status').textContent='Loading Ottawa hourly forecast…';
+      const p=selectedPeriod();
+      const url='https://api.open-meteo.com/v1/forecast?latitude='+LAT+'&longitude='+LON+
+        '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,snowfall,snow_depth,wind_speed_10m,weather_code,uv_index'+
+        '&timezone=America%2FToronto&forecast_days=3';
+      const ctrl=new AbortController();let timer=setTimeout(()=>ctrl.abort(),15000);
+      try{
+        const res=await fetch(url,{signal:ctrl.signal,cache:'no-store'});
+        if(!res.ok)throw Error('Weather server '+res.status);
+        const raw=await res.json(),h=raw.hourly;
+        if(!h||!Array.isArray(h.time))throw Error('Hourly weather missing');
+        const required=['temperature_2m','apparent_temperature','precipitation_probability','precipitation',
+          'snowfall','wind_speed_10m','weather_code'];
+        if(required.some(k=>!Array.isArray(h[k])))throw Error('Weather variables missing');
+        const hours=[];
+        h.time.forEach((time,i)=>{
+          if(!time.startsWith(p.date))return;
+          const hour=Number(time.slice(11,13));
+          if(hour<p.start||hour>p.end)return;
+          const obj={hour,temp:h.temperature_2m[i],feels:h.apparent_temperature[i],
+            rain:h.precipitation_probability[i],precip:h.precipitation[i],snowfall:h.snowfall[i],
+            snowDepth:Number((h.snow_depth||[])[i]||0),wind:h.wind_speed_10m[i],
+            code:h.weather_code[i],uv:Number((h.uv_index||[])[i]||0)};
+          if([obj.temp,obj.feels,obj.rain,obj.precip,obj.snowfall,obj.wind,obj.code].every(Number.isFinite))hours.push(obj);
+        });
+        if(hours.length<2)throw Error('Incomplete selected-day forecast');
+        const all=weatherStats(hours);
+        const recessHours=hours.filter(x=>x.hour>=9&&x.hour<=15);
+        const recess=weatherStats(recessHours.length?recessHours:hours);
+        const am=hours.filter(x=>x.hour<=9),pm=hours.filter(x=>x.hour>=15);
+        forecastData={weekend:p.weekend,all,recess,hours,am,pm};
+        $('date').textContent=new Intl.DateTimeFormat('en-CA',{weekday:'long',month:'long',day:'numeric',timeZone:'UTC'}).format(new Date(p.date+'T12:00:00Z'));
+        $('forecastPeriod').textContent=p.weekend?'Weekend · '+p.start+':00–'+p.end+':00 outdoor outlook':
+          'School day · 8 AM–4 PM · recess time approximate';
+        $('weather').textContent=showTemp(all.tempMin)+'–'+showTemp(all.tempMax);
+        const weatherOfDay=hours.find(x=>isSnow(x.code))||hours.find(x=>isRain(x.code))||hours[0];
+        $('weatherIcon').textContent=weatherIcon(weatherOfDay.code);
+        $('feelsLike').textContent='Feels like '+showTemp(all.cold)+' to '+showTemp(all.warm);
+        $('updated').textContent='Updated '+formatShortTime(new Date());
+        $('rainChance').textContent='Peak precipitation chance '+Math.round(all.chance)+'%';
+        $('windInfo').textContent='Max wind '+Math.round(all.wind)+' km/h';
+        $('summary').textContent=all.snow?'Snow possible':all.wet?'Rain possible':weatherSummary(weatherOfDay.code);
+        $('status').textContent='Hourly forecast updated';
+        const strip=$('dayBreakdown');strip.replaceChildren();
+        const blocks=p.weekend?[dayCard('🌤️ Weekend hours ahead',hours)]:[
+          dayCard('🌅 Morning bus · 8–9',am),
+          dayCard('🌲 Recess possible · 9–15',recessHours),
+          dayCard('🚌 Return bus · 15–16',pm)
+        ];
+        blocks.filter(Boolean).forEach(x=>strip.appendChild(x));
+        const warn=$('weatherAdvisory');warn.hidden=all.cold>-27;
+        warn.textContent=all.cold<=-27?'⚠️ Severe cold: check school policy and official weather alerts.':'';
         renderAll();
-      } catch (err) {
-        $('status').textContent = 'Could not refresh forecast. Showing saved ages only.';
-        $('summary').textContent = 'Forecast unavailable';
-      }
+      }catch(e){
+        forecastData=null;
+        $('weather').textContent='Forecast unavailable';
+        $('feelsLike').textContent='Check another weather service';
+        $('rainChance').textContent='';$('windInfo').textContent='';$('summary').textContent='';
+        $('status').textContent='Weather error: '+e.message;
+        $('dayBreakdown').replaceChildren();$('weatherAdvisory').hidden=true;
+        kids.forEach(k=>{$('outfit'+k.id).textContent='Weather unavailable — check a trusted forecast before dressing for outdoors.';});
+      }finally{clearTimeout(timer);}
     }
 
     $('refresh').addEventListener('click', loadWeather);
@@ -826,6 +849,7 @@
     });
 
     setInterval(loadWeather, 15 * 60 * 1000);
+    document.addEventListener('pointerdown',()=>{if(Date.now()-lastFetchAt>10*60*1000)loadWeather();},{passive:true});
 
     renderBirthdays();
     loadWeather();
