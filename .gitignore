@@ -1,0 +1,7 @@
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+family_finance_initial_import.json
+*finance-private*.json
