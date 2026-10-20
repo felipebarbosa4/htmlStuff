@@ -6,6 +6,7 @@
 <title>Family Smart Dashboard</title>
 <style>
 :root{font-family:system-ui,-apple-system,Arial,sans-serif;color:#eef6ff;background:#091424}*{box-sizing:border-box}html,body{margin:0;min-height:100%;}body{display:flex;flex-direction:column;min-height:100vh}.top{padding:12px 18px;display:flex;gap:16px;align-items:center;justify-content:space-between;border-bottom:1px solid #344660;background:#12243b;flex-wrap:wrap}.brand{font-size:18px;font-weight:800}.small{color:#adc0d5;font-size:14px}.controls{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.controls button{border:1px solid #53728e;color:#d4e8ff;background:#1e3552;padding:9px 12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}.controls button.current{color:#062323;background:#73eadb;border-color:#73eadb}#stage{position:relative;flex:1;min-height:65vh}#frame{width:100%;height:calc(100vh - 74px);border:0;background:#091424}.view{padding:clamp(20px,4vw,52px);max-width:1200px;margin:auto}.big{font-size:clamp(33px,6vw,70px);margin:10px 0}.card{border-radius:22px;border:1px solid #405b7a;background:#19304c;padding:25px;max-width:800px;margin:20px 0}.dim{color:#b4c8df}.clock{font-size:clamp(44px,10vw,120px);font-weight:800;font-variant-numeric:tabular-nums}.notice{border-left:4px solid #73eadb;padding:12px 16px;background:#193047}.actions a{display:inline-block;color:#092527;background:#73eadb;padding:14px 18px;border-radius:12px;text-decoration:none;font-weight:800}.hint{line-height:1.7}.foot{font-size:13px;color:#b4c8df;margin-top:20px}@media(max-width:750px){.top{padding:10px}.controls button{padding:9px}#frame{height:calc(100vh - 116px)}}
+.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
 </style></head>
 <body>
 <header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="meals">Meals</button><button data-mode="night">Night</button></nav></header>
@@ -21,11 +22,60 @@ function setUI(mode){
 const el=document.getElementById('stage');el.replaceChildren();
 if(mode==='weather'){const f=document.createElement('iframe');f.id='frame';f.src=BASE+'&refresh='+Date.now();f.title='Children clothing recommendations for Ottawa';el.appendChild(f);return;}
 const view=document.createElement('section');view.className='view';el.appendChild(view);
-if(mode==='calendar')view.innerHTML='<div class="small">09:00–17:00 · FAMILY SCHEDULE</div><h1 class="big">📅 Today\'s calendar</h1><div class="card"><h2>Google Calendar is not connected yet</h2><p class="hint">Your private events are not published here. Next step: connect a secure, read-only calendar feed through a protected backend.</p><p class="notice">Do not publish private calendar links, tokens, passwords or Google OAuth refresh tokens in this public GitHub repository.</p></div>';
+if(mode==='calendar'){view.innerHTML='<div class="small">09:00–17:00 · FAMILY SCHEDULE</div><h1 class="big">📅 Today\'s calendar</h1><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars in the authorized Google account · Refreshes every 10 minutes</p>';loadCalendar(view);}
 else if(mode==='meals')view.innerHTML='<div class="small">17:00–19:00 · FAMILY MEAL IDEAS</div><h1 class="big">🍲 What should we cook?</h1><div class="card"><h2>Muse Spark integration pending</h2><p class="hint">This is the future place for lunch and dinner ideas with ingredients, preparation time and dietary preferences.</p><p class="notice">The Meta API requires a private server-side key. No live AI recommendations are connected yet.</p></div>';
 else view.innerHTML='<div class="small">FAMILY EVENING</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good evening!</h1><p class="dim">The screen can be put to sleep by Fully Kiosk at your chosen time.</p>';
 }
-function render(){const p=parts();document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';const selected=manual==='auto'?which(p):manual;if(selected!==visible){visible=selected;setUI(selected)}const c=document.getElementById('large-clock');if(c)c.textContent=p.hour+':'+p.minute;for(const b of document.querySelectorAll('[data-mode]')){b.classList.toggle('current',b.dataset.mode===manual);b.setAttribute('aria-pressed',String(b.dataset.mode===manual));}}
+
+let calendarUpdatedAt=0;
+function ottawaDate(){
+ const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+ return p.year+'-'+p.month+'-'+p.day;
+}
+function eventTime(date){
+ const d=new Date(date);
+ return Number.isFinite(d.valueOf())?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(d):'Time unavailable';
+}
+async function loadCalendar(view){
+ if(!view?.isConnected || visible!=='calendar')return;
+ const info=view.querySelector('#calendar-info'),target=view.querySelector('#calendar-events');
+ if(!info||!target)return;
+ calendarUpdatedAt=Date.now();
+ info.textContent='Checking all calendars for today…';
+ target.replaceChildren();
+ const date=ottawaDate();
+ try {
+   const resp=await fetch('/api/calendar?date='+encodeURIComponent(date),{credentials:'same-origin',cache:'no-store'});
+   if(!resp.headers.get('content-type')?.includes('application/json'))throw Error('Authentication may have expired. Sign in to the dashboard again.');
+   const data=await resp.json();
+   if(!resp.ok)throw Error(data.error||'Calendar API unavailable');
+   if(!view.isConnected || visible!=='calendar')return;
+   info.textContent=data.eventCount+' event'+(data.eventCount===1?'':'s')+' today · '+data.calendarCount+' calendars'+(data.partial?' · Some calendars could not be loaded':'');
+   const events=data.events||[];
+   if(!events.length){const b=document.createElement('div');b.className='agenda-empty';b.textContent='No appointments today. Enjoy your free time!';target.appendChild(b);return;}
+   let placedAllDay=false,placedTimed=false;
+   for(const event of events){
+     if(event.allDay&&!placedAllDay){placedAllDay=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='ALL DAY';target.appendChild(h);}
+     if(!event.allDay&&!placedTimed){placedTimed=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='APPOINTMENTS';target.appendChild(h);}
+     const row=document.createElement('article');row.className='agenda-row';
+     const time=document.createElement('div');time.className='agenda-time';time.textContent=event.allDay?'All day':eventTime(event.start)+(event.end?' – '+eventTime(event.end):'');
+     const card=document.createElement('div');card.className='agenda-event';
+     if(/^#[0-9a-fA-F]{6}$/.test(event.color||''))card.style.borderLeftColor=event.color;
+     const title=document.createElement('h2');title.textContent=event.title||'Busy';
+     const sub=document.createElement('div');sub.className='agenda-meta';sub.textContent=event.calendar+(event.location?' · '+event.location:'');
+     card.append(title,sub);row.append(time,card);target.appendChild(row);
+   }
+ }catch(e){
+   if(!view.isConnected || visible!=='calendar')return;
+   info.textContent='Calendar connection needs attention';
+   const b=document.createElement('div');b.className='agenda-empty';
+   b.textContent=e.message+'. The dashboard remains private; no calendar data has been published.';
+   target.appendChild(b);
+ }
+}
+
+function render(){const p=parts();document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';const selected=manual==='auto'?which(p):manual;if(selected!==visible){visible=selected;setUI(selected)}if(selected==='calendar' && Date.now()-calendarUpdatedAt>10*60*1000){const v=document.querySelector('#stage .view');if(v)loadCalendar(v);}const c=document.getElementById('large-clock');if(c)c.textContent=p.hour+':'+p.minute;for(const b of document.querySelectorAll('[data-mode]')){b.classList.toggle('current',b.dataset.mode===manual);b.setAttribute('aria-pressed',String(b.dataset.mode===manual));}}
 for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('click',()=>{manual=b.dataset.mode;visible='';render()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
 setInterval(render,15000);render();
