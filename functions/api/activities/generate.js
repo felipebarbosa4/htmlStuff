@@ -173,7 +173,19 @@ export async function onRequestPost(context) {
     const choice=await selectWithAI(env,pool,targetDate,weather.filter(x=>x.time.startsWith(targetDate)).slice(0,12)
       .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '));
     const byId=new Map(pool.map(x=>[x.id,x]));
-    const ids=[...new Set([...choice.ids,...pool.map(p=>p.id)])].slice(0,8);
+    const ranked=[...new Set([...choice.ids,...pool.map(p=>p.id)])];
+    const ids=[],categoryCount=new Map();
+    // Enforce variety even when the model over-selects one category.
+    for(const cap of [2,3,8]) {
+      for(const id of ranked) {
+        if(ids.length>=8)break;
+        if(ids.includes(id))continue;
+        const cat=byId.get(id)?.category;if(!cat)continue;
+        const count=categoryCount.get(cat)||0;
+        if(count>=cap)continue;
+        ids.push(id);categoryCount.set(cat,count+1);
+      }
+    }
     const items=ids.map(id=>{
       const p=byId.get(id);if(!p)return null;
       const note=choice.notes[id]||{};
