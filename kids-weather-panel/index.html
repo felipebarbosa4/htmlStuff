@@ -255,6 +255,35 @@
       .wear-section{margin-top:7px}
       .item{min-height:63px}
     }
+
+    /* Kid-friendly minimal wardrobe: one row for each body area */
+    .minimal-outfit{display:grid;grid-template-columns:1fr;gap:7px;margin-top:8px}
+    .outfit-row{background:#254363;border:1px solid #395574;border-radius:12px;
+      display:grid;grid-template-columns:65px minmax(0,1fr);align-items:center;
+      min-height:70px;gap:9px;padding:5px 10px}
+    .outfit-picture{height:60px;width:60px;display:flex;align-items:center;justify-content:center}
+    .outfit-picture svg{width:60px;height:60px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.25))}
+    .none-symbol{font-size:30px;font-weight:800;color:#8de4cf}
+    .part-copy{min-width:0;display:flex;flex-direction:column;gap:4px}
+    .part-label{font-size:11px;color:#8de4cf;font-weight:800;letter-spacing:.1em}
+    .part-value{font-size:clamp(15px,1.5vw,19px);line-height:1.25;color:white;font-weight:700}
+    .hero .big{white-space:nowrap}
+    .weather-more{font-size:12px;color:#c5d8e7;margin-top:6px}
+    .weather-more summary{cursor:pointer}
+    .weather-more .day-breakdown{margin-top:7px}
+    @media (min-width:760px) and (orientation:landscape){
+      header h1{font-size:clamp(25px,3vw,36px)}
+      .hero{margin:7px 0 8px;padding:9px 14px}
+      .heroGrid{grid-template-columns:245px minmax(0,1fr)}
+      .big{font-size:clamp(34px,3.9vw,48px)}
+      .tempIcon{font-size:29px}
+      .kid{padding:11px}
+      .kidTop{margin-bottom:4px}
+      .minimal-outfit{gap:6px}
+      .outfit-row{min-height:65px;grid-template-columns:58px minmax(0,1fr);padding:3px 9px}
+      .outfit-picture,.outfit-picture svg{height:54px;width:54px}
+      .part-value{font-size:16px}
+    }
   </style>
 </head>
 <body>
@@ -403,7 +432,9 @@
             <div id="windInfo">Wind --</div>
             <div id="summary">Checking forecast…</div>
           </div>
-          <div id="status" class="pill">Checking live Ottawa forecast…</div><div class="day-breakdown" id="dayBreakdown"></div><div id="weatherAdvisory" class="cold-warning" hidden></div>
+          <div id="status" class="pill">Checking live Ottawa forecast…</div>
+          <details class="weather-more"><summary>Hourly details</summary><div class="day-breakdown" id="dayBreakdown"></div></details>
+          <div id="weatherAdvisory" class="cold-warning" hidden></div>
         </div>
       </div>
     </section>
@@ -440,7 +471,7 @@
 
     <details>
       <summary>About the recommendations</summary>
-      <p>Weekdays consider 8 AM to 4 PM including school indoor time, a 40–60 minute outdoor recess (exact time unknown) and the 3:30 PM bus. Outdoor layers should be taken off in heated classrooms. Weekends show daytime outdoor suggestions when the page is opened. These are approximate rules, not medically validated clothing prescriptions; check school weather policies.</p>
+      <p>Four clothing groups use the Ottawa forecast during school hours (morning bus, outdoor recess and afternoon bus), or daytime on weekends. Jackets, hats and snow pants are removable for indoors. These are approximate guidelines, not medically validated prescriptions: check personal comfort, school rules and official alerts.</p>
       <p>Age settings are saved only on this device. Weather data comes from Open-Meteo.</p>
     </details>
 
@@ -592,57 +623,48 @@
       const weekend=weekday===0||weekday===6;
       return {date,weekend,start:weekend?(date===today?Math.min(Math.max(hour,9),18):9):8,end:weekend?19:16};
     }
+
+    // Exactly four ordered clothing suggestions. Layers are suggested only if necessary.
+    // Heuristic thresholds; actual comfort and outdoor-play policies vary.
     function chooseClothes(day,age){
       const q=day.weekend?day.all:day.recess;
-      const indoor=[],outdoor=[];
-      const add=(list,name,tag)=>list.push({name,tag});
-      add(indoor,q.cold<=3?'Light long sleeves':'T-shirt',day.weekend?'BASE':'WEAR IN CLASS');
-      add(indoor,q.warm>=24?'Light pants or shorts':'Comfortable pants',day.weekend?'BOTTOMS':'WEAR IN CLASS');
-      if(!day.weekend)add(indoor,'Indoor sneakers','WEAR IN CLASS');
-      const wetSource=day.weekend?q:day.all;
-      const wet=wetSource.wet||wetSource.chance>=50,snow=wetSource.snow;
-      const cold=q.cold;
-      if(cold<=-12){
-        add(outdoor,'Insulated winter coat','FOR OUTDOORS');
-        add(outdoor,'Snow pants for recess','FOR OUTDOORS');
-        add(outdoor,'Warm waterproof boots','FOR OUTDOORS');
-        add(outdoor,'Warm mittens','FOR OUTDOORS');
-        add(outdoor,'Warm hat covering ears','FOR OUTDOORS');
-        add(outdoor,'Fleece, if needed','OPTIONAL LAYER');
-      }else if(cold<=-5){
-        add(outdoor,wet?'Water-resistant winter coat':'Winter coat','FOR OUTDOORS');
-        add(outdoor,'Warm waterproof boots','FOR OUTDOORS');
-        add(outdoor,'Mittens + warm hat','FOR OUTDOORS');
-        if(snow)add(outdoor,'Snow pants for recess','FOR OUTDOORS');
-        add(outdoor,'Fleece if still cold','OPTIONAL LAYER');
-      }else if(cold<=3){
-        add(outdoor,wet?'Water-resistant warm jacket':'Warm removable jacket','FOR OUTDOORS');
-        add(outdoor,(snow||wet)?'Waterproof shoes or boots':'Closed shoes or boots','FOR OUTDOORS');
-        if(snow)add(outdoor,'Snow pants for recess','FOR OUTDOORS');
-        add(outdoor,'Light hat + gloves if cold','OPTIONAL');
-      }else if(cold<=10){
-        add(outdoor,wet?'Waterproof light jacket':'Light jacket or hoodie','FOR OUTDOORS');
-        add(outdoor,wet?'Waterproof shoes':'Sneakers','FOR OUTDOORS');
-      }else if(cold<=16){
-        if(wet)add(outdoor,'Light rain jacket','PACK FOR RAIN');
-        else add(outdoor,'Light hoodie if chilly','OPTIONAL');
-        add(outdoor,'Sneakers','FOR OUTDOORS');
-      }else{
-        add(outdoor,'Sneakers','FOR OUTDOORS');
-        if(q.warm>=24)add(outdoor,'Sun hat + water bottle','FOR OUTDOORS');
-      }
-      if(snow&&cold>3)add(outdoor,'Waterproof boots if snow','FOR SNOW');
-      if(wet&&cold<=3&&!outdoor.some(x=>/waterproof/i.test(x.name)&&/shoes|boots/i.test(x.name)))
-        add(outdoor,'Waterproof shoes / boots','FOR WET WEATHER');
-      if(q.wind>=30&&cold>10&&!outdoor.some(x=>/jacket|coat|hoodie/i.test(x.name)))
-        add(outdoor,'Wind-resistant layer','OPTIONAL / WIND');
-      if(q.uv>=3)add(outdoor,'Sunscreen for exposed skin','OUTDOOR SUN');
-      if(age<=5&&cold<=3)add(outdoor,'Check hat + gloves fit','CHECK COMFORT');
-      return {indoor,outdoor,
-        tip:day.weekend?'Adjust removable outerwear for activity and time outdoors.':
-          'Put on outdoor gear for recess (~40–60 min) and bus stops. REMOVE coats and extra layers in warm classrooms.',
-        warning:q.cold<=-27?'Extreme cold: check school policy and weather alerts before outdoor play.':
-          q.cold<=-15?'Very cold for long recess: follow school outdoor-play policy.':''};
+      const full=day.all;
+      const cold=q.cold,early=full.cold,hot=q.warm;
+      const wet=full.wet||full.chance>=50;
+      const snow=full.snow;
+      const wind=q.wind>=30;
+      const young=age<=5;
+
+      let head='No hat needed';
+      if(cold<=-6||early<=-12)head='Warm hat + mittens';
+      else if(cold<=0||early<=-7||(young&&cold<=2))head='Light hat + gloves';
+      else if(hot>=23&&full.uv>=4)head='Sun hat';
+
+      // Classroom-friendly inner shirt with one removable outer layer.
+      const shirt=hot>=17&&cold>5?'T-shirt':cold<=-13?'Thermal long sleeves':'Long sleeves';
+      let outer='';
+      if(cold<=-13)outer='fleece + winter coat';
+      else if(cold<=-6||early<=-14)outer='winter coat';
+      else if(cold<=3||early<=-5)outer=wet?'water-resistant warm jacket':'warm jacket';
+      else if(cold<=10||(wind&&cold<=15))outer=wet?'rain jacket':'light jacket';
+      else if(wet)outer='rain jacket';
+      const body=outer?shirt+' + '+outer+' (outside)':shirt;
+
+      const basePants=hot>=24&&cold>=19?'Shorts':'Long pants';
+      const snowPants=cold<=-13||(snow&&cold<=1);
+      const pants=snowPants?basePants+' + snow pants (outside)':basePants;
+
+      let feet='Sneakers';
+      if(cold<=-8||early<=-15)feet='Winter boots';
+      else if((snow||wet)&&cold<=5)feet='Waterproof boots';
+      else if(wet)feet='Waterproof shoes';
+
+      return [
+        {part:'HEAD',value:head,art:head==='No hat needed'?null:head==='Sun hat'?'sunhat':'hat'},
+        {part:'BODY',value:body,art:outer?outer.includes('winter coat')?'parka':outer.includes('rain jacket')?'raincoat':'jacket':shirt==='T-shirt'?'tshirt':shirt.includes('Thermal')?'thermal':'longshirt'},
+        {part:'PANTS',value:pants,art:snowPants?'snowpants':basePants==='Shorts'?'shorts':'pants'},
+        {part:'FEET',value:feet,art:/boots/i.test(feet)?'boots':'shoes'}
+      ];
     }
 
     let forecastData = null;
@@ -703,47 +725,38 @@
       return 'Extra for the weather';
     }
 
-    function outfitCard(item){
-      const card=document.createElement('div');card.className='item';
-      const visual=document.createElement('div');visual.className='garment-visual';
-      const svgNS='http://www.w3.org/2000/svg';
-      const drawing=document.createElementNS(svgNS,'svg');
-      drawing.setAttribute('viewBox','0 0 120 120');
-      drawing.setAttribute('class','garment-art');
-      drawing.setAttribute('role','img');drawing.setAttribute('aria-label',item.name);
-      const use=document.createElementNS(svgNS,'use');
-      use.setAttribute('href','#wear-'+garmentIllustration(item.name));
-      use.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#wear-'+garmentIllustration(item.name));
-      drawing.appendChild(use);visual.appendChild(drawing);
-      const wrap=document.createElement('div');wrap.className='garment-text';
-      const role=document.createElement('span');role.className='wear-role';role.textContent=item.tag;
-      const title=document.createElement('span');title.className='garment-label';title.textContent=item.name;
-      wrap.append(role,title);card.append(visual,wrap);return card;
-    }
-    function outfitGroup(title,tip,items){
-      const sec=document.createElement('section');sec.className='wear-section';
-      const heading=document.createElement('h3');heading.className='wear-heading';heading.textContent=title;
-      sec.appendChild(heading);
-      if(tip){const p=document.createElement('p');p.className='wear-tip';p.textContent=tip;sec.appendChild(p);}
-      const group=document.createElement('div');group.className='outfit';
-      items.forEach(i=>group.appendChild(outfitCard(i)));
-      sec.appendChild(group);return sec;
+
+    function createOutfitRow(item){
+      const row=document.createElement('div');row.className='outfit-row';
+      const image=document.createElement('div');image.className='outfit-picture';
+      if(item.art){
+        const ns='http://www.w3.org/2000/svg';
+        const svg=document.createElementNS(ns,'svg');
+        svg.setAttribute('viewBox','0 0 120 120');
+        svg.setAttribute('role','img');
+        svg.setAttribute('aria-label',item.part);
+        const use=document.createElementNS(ns,'use');
+        use.setAttribute('href','#wear-'+item.art);
+        use.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#wear-'+item.art);
+        svg.appendChild(use);image.appendChild(svg);
+      }else{
+        const none=document.createElement('span');none.className='none-symbol';
+        none.textContent='✓';image.appendChild(none);
+      }
+      const copy=document.createElement('div');copy.className='part-copy';
+      const heading=document.createElement('span');heading.className='part-label';heading.textContent=item.part;
+      const value=document.createElement('span');value.className='part-value';value.textContent=item.value;
+      copy.append(heading,value);row.append(image,copy);
+      return row;
     }
     function renderOutfits(){
       if(!forecastData)return;
       kids.forEach(kid=>{
         const age=Math.max(1,Math.min(17,Number($('age'+kid.id).value)||kid.defaultAge));
-        const clothes=chooseClothes(forecastData,age);
         $('name'+kid.id).textContent=kid.emoji+' '+kid.name+' · Age '+age;
-        const container=$('outfit'+kid.id);container.className='wardrobe';
-        container.replaceChildren(
-          outfitGroup(forecastData.weekend?'👕 Base clothes':'🏫 INSIDE school',null,clothes.indoor),
-          outfitGroup(forecastData.weekend?'🌤️ ADD outdoors':'🌲 ADD for recess + bus',clothes.tip,clothes.outdoor)
-        );
-        if(clothes.warning){
-          const warning=document.createElement('p');warning.className='cold-warning';
-          warning.textContent=clothes.warning;container.appendChild(warning);
-        }
+        const container=$('outfit'+kid.id);
+        container.className='minimal-outfit';
+        container.replaceChildren(...chooseClothes(forecastData,age).map(createOutfitRow));
       });
     }
 
