@@ -5,7 +5,7 @@ export async function onRequestPost({request,env}){
  try{
   const data=await requestJson(request,500);
   const pass=String(data.password||"");
-  const valid=pass.length>=12&&pass.length<=200&&await secureEquals(pass,env.FINANCE_ADMIN_PASSWORD);
+  const valid=/^\d{6}$/.test(pass)&&await secureEquals(pass,env.FINANCE_PIN);
   if(!await checkAttempt(request,env,"admin",valid))return json({error:"Invalid credentials or too many attempts."},401);
   return json({ok:true,expiresIn:1200},200,{"set-cookie":await cookieFor(env,"admin",1200)});
  }catch{return json({error:"Invalid request"},400);}
