@@ -39,6 +39,7 @@ window.FinancePanel=(()=>{
    const login=view.querySelector('#finance-login'),panel=view.querySelector('#finance-data');
    if(login)login.hidden=false;
    if(panel)panel.hidden=true;
+   const lockButton=view.querySelector('#finance-lock');if(lockButton)lockButton.hidden=true;
    view.querySelector('#finance-content')?.replaceChildren();
    view.querySelector('#finance-summary')?.replaceChildren();
    const pin=view.querySelector('#finance-pin');
