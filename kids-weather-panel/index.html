@@ -599,7 +599,8 @@
       add(indoor,q.cold<=3?'Light long sleeves':'T-shirt',day.weekend?'BASE':'WEAR IN CLASS');
       add(indoor,q.warm>=24?'Light pants or shorts':'Comfortable pants',day.weekend?'BOTTOMS':'WEAR IN CLASS');
       if(!day.weekend)add(indoor,'Indoor sneakers','WEAR IN CLASS');
-      const wet=q.wet||q.chance>=50,snow=q.snow;
+      const wetSource=day.weekend?q:day.all;
+      const wet=wetSource.wet||wetSource.chance>=50,snow=wetSource.snow;
       const cold=q.cold;
       if(cold<=-12){
         add(outdoor,'Insulated winter coat','FOR OUTDOORS');
@@ -616,7 +617,7 @@
         add(outdoor,'Fleece if still cold','OPTIONAL LAYER');
       }else if(cold<=3){
         add(outdoor,wet?'Water-resistant warm jacket':'Warm removable jacket','FOR OUTDOORS');
-        add(outdoor,snow?'Waterproof boots':'Closed shoes or boots','FOR OUTDOORS');
+        add(outdoor,(snow||wet)?'Waterproof shoes or boots':'Closed shoes or boots','FOR OUTDOORS');
         if(snow)add(outdoor,'Snow pants for recess','FOR OUTDOORS');
         add(outdoor,'Light hat + gloves if cold','OPTIONAL');
       }else if(cold<=10){
@@ -631,7 +632,7 @@
         if(q.warm>=24)add(outdoor,'Sun hat + water bottle','FOR OUTDOORS');
       }
       if(snow&&cold>3)add(outdoor,'Waterproof boots if snow','FOR SNOW');
-      if(wet&&cold<=3&&!outdoor.some(x=>x.name.includes('waterproof')||x.name.includes('Waterproof')))
+      if(wet&&cold<=3&&!outdoor.some(x=>/waterproof/i.test(x.name)&&/shoes|boots/i.test(x.name)))
         add(outdoor,'Waterproof shoes / boots','FOR WET WEATHER');
       if(q.wind>=30&&cold>10&&!outdoor.some(x=>/jacket|coat|hoodie/i.test(x.name)))
         add(outdoor,'Wind-resistant layer','OPTIONAL / WIND');
