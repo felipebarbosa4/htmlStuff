@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>Family Finance — Private Administration</title>
+<style>
+:root{font-family:system-ui,-apple-system,Arial;color:#e9f4ff;background:#0a1525}
+*{box-sizing:border-box}body{margin:0;padding:clamp(15px,3vw,38px)}
+h1{font-size:clamp(30px,4vw,48px)}p,small{color:#b6c9de}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.panel{padding:23px;border:1px solid #405b7a;background:#18314e;border-radius:18px;margin:20px 0}
+button{background:#73eadb;color:#08282b;border:0;border-radius:9px;padding:11px 14px;font-weight:800;cursor:pointer}
+button.secondary{background:#304966;color:#e6f0fb}
+input,select,textarea{padding:9px;background:#091525;color:#eef6ff;border:1px solid #557390;border-radius:8px;max-width:100%}
+input[type=number]{width:115px}
+label{font-size:13px;color:#aec5d8;font-weight:700}
+.row{display:grid;grid-template-columns:minmax(180px,2fr) minmax(105px,1fr) minmax(130px,1fr) minmax(140px,1fr) 135px 130px;gap:8px;align-items:end;padding:14px 0;border-bottom:1px solid #415670}
+.row input,.row select{width:100%}.row-extra{grid-column:1 / -1;display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:12px;align-items:end}
+.field{display:flex;flex-direction:column;gap:5px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#login{max-width:500px}#login input{width:100%;font-size:18px}
+#error{color:#ffabab;min-height:20px}#message{color:#abf1db;min-height:20px}
+.stat{font-size:25px;font-weight:800}
+[hidden]{display:none!important}
+@media(max-width:1000px){.row{grid-template-columns:repeat(3,minmax(130px,1fr))}.row-extra{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.row{grid-template-columns:1fr 1fr}.row-extra{grid-template-columns:1fr}}
+</style></head>
+<body>
+<header><div><div style="color:#7fe6d8;font-size:13px;letter-spacing:.12em">PRIVATE PC ADMINISTRATION</div><h1>Family Finance Admin</h1></div><button class="secondary" type="button" id="lock" hidden>Lock administration</button></header>
+<p>Manage the household's fixed costs and subscriptions. This page is not linked from the tablet dashboard.</p>
+<section id="login" class="panel">
+<form id="login-form"><div class="field"><label for="password">Administrator password (separate from the tablet PIN)</label><input type="password" id="password" autocomplete="current-password" required minlength="12"></div><p><button type="submit">Sign in</button></p></form>
+<p id="error" role="alert"></p></section>
+<main id="editor" hidden>
+<div class="panel"><div class="bar"><button type="button" id="add">+ Add expense / subscription</button><button type="button" id="save">Save changes</button><label for="import" class="secondary" style="cursor:pointer;border:1px solid #8ca6bc;padding:10px;border-radius:9px">Import JSON</label><input type="file" id="import" accept=".json,application/json" hidden><button type="button" class="secondary" id="download">Export JSON</button></div>
+<p id="message" role="status"></p><p class="stat" id="summary">No records loaded</p><p>The monthly budget reflects estimated expenses, not verified bank payments. Changes only become permanent after pressing Save changes.</p>
+<div id="rows"></div></div>
+</main>
+<script>
+'use strict';
+let items=[],authenticated=false;
+const byId=id=>document.getElementById(id);
+const allowedCategories=['essential','subscription','fee'],allowedFrequencies=['monthly','biweekly','weekly','quarterly','yearly'],allowedStatuses=['active','review','paused','cancelled'];
+const post=(path,body)=>request(path,{method:'POST',body:JSON.stringify(body)});
+async function request(path,options={}){
+ const r=await fetch('/api/finance/'+path,{credentials:'same-origin',cache:'no-store',headers:{'content-type':'application/json'},...options});
+ const data=await r.json();if(!r.ok)throw Error(data.error||'Request failed');return data;
+}
+function newId(){return 'e'+crypto.randomUUID().replace(/-/g,'');}
+function normalizeImported(x){
+ if(!x||typeof x!=='object')throw Error('Invalid record');
+ return {id:/^[a-zA-Z0-9_-]{3,80}$/.test(String(x.id||''))?String(x.id):newId(),
+  name:String(x.name||''),monthlyBudget:Number(x.monthlyBudget||0),category:allowedCategories.includes(x.category)?x.category:'subscription',
+  frequency:allowedFrequencies.includes(x.frequency)?x.frequency:'monthly',status:allowedStatuses.includes(x.status)?x.status:'review',
+  due:String(x.due||''),note:String(x.note||''),source:String(x.source||''),confirmed:x.confirmed===true};
+}
+function field(label,value,onchange,type='text'){
+ const container=document.createElement('label');container.className='field';
+ const caption=document.createElement('span');caption.textContent=label;container.append(caption);
+ const input=document.createElement('input');input.type=type;input.value=value;
+ if(type==='number'){input.min='0';input.step='.01';}
+ input.addEventListener('input',()=>onchange(input.value));container.append(input);return container;
+}
+function dropdown(label,current,options,onchange){
+ const wrapper=document.createElement('label');wrapper.className='field';const span=document.createElement('span');span.textContent=label;
+ const sel=document.createElement('select');for(const option of options){const el=document.createElement('option');el.value=option;el.textContent=option;sel.append(el);}
+ sel.value=current;sel.addEventListener('change',()=>onchange(sel.value));wrapper.append(span,sel);return wrapper;
+}
+function render(){
+ const target=byId('rows');target.replaceChildren();
+ const active=items.filter(x=>x.status!=='paused'&&x.status!=='cancelled');
+ const total=active.reduce((sum,x)=>sum+Number(x.monthlyBudget||0),0);
+ byId('summary').textContent=items.length+' records · Monthly budget '+new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'}).format(total);
+ for(const item of items){
+  const row=document.createElement('div');row.className='row';
+  row.append(field('Name',item.name,v=>item.name=v),field('Monthly budget CAD',item.monthlyBudget,v=>item.monthlyBudget=Number(v),'number'),
+    dropdown('Category',item.category,allowedCategories,v=>item.category=v),
+    dropdown('Frequency',item.frequency,allowedFrequencies,v=>item.frequency=v),
+    field('Billing day / pattern',item.due,v=>item.due=v),
+    dropdown('Status',item.status,allowedStatuses,v=>item.status=v));
+  const more=document.createElement('div');more.className='row-extra';
+  more.append(field('Source / reference',item.source,v=>item.source=v),field('Notes',item.note,v=>item.note=v));
+  const confirmation=document.createElement('label');confirmation.className='field';const label=document.createElement('span');label.textContent='Amount verified';const check=document.createElement('input');check.type='checkbox';check.checked=item.confirmed;check.addEventListener('change',()=>item.confirmed=check.checked);confirmation.append(label,check);
+  const remove=document.createElement('button');remove.className='secondary';remove.type='button';remove.textContent='Delete';remove.addEventListener('click',()=>{if(confirm('Remove '+item.name+'? Changes are not saved yet.')){items=items.filter(x=>x.id!==item.id);render();}});
+  more.append(confirmation,remove);row.append(more);target.append(row);
+ }
+}
+function logout(){authenticated=false;items=[];byId('editor').hidden=true;byId('login').hidden=false;byId('lock').hidden=true;byId('password').value='';byId('rows').replaceChildren();void post('logout',{}).catch(()=>{});}
+byId('login-form').addEventListener('submit',async event=>{
+ event.preventDefault();byId('error').textContent='';
+ try{
+  await post('admin-login',{password:byId('password').value});
+  byId('password').value='';
+  const data=await request('expenses');items=Array.isArray(data.items)?data.items:[];
+  authenticated=true;byId('login').hidden=true;byId('editor').hidden=false;byId('lock').hidden=false;render();
+ }catch(e){byId('error').textContent=e.message;}
+});
+byId('lock').addEventListener('click',logout);
+byId('add').addEventListener('click',()=>{
+ items.push({id:newId(),name:'New subscription',monthlyBudget:0,category:'subscription',frequency:'monthly',status:'review',due:'',note:'',source:'',confirmed:false});render();
+});
+byId('save').addEventListener('click',async()=>{
+ byId('message').textContent='';
+ try{const result=await request('expenses',{method:'PUT',body:JSON.stringify({items})});byId('message').textContent='Saved '+result.count+' records at '+new Date(result.updatedAt).toLocaleString('en-CA');render();}
+ catch(e){byId('message').textContent='Save failed: '+e.message;}
+});
+byId('import').addEventListener('change',async event=>{
+ const f=event.target.files?.[0];if(!f)return;
+ try{
+  if(f.size>75000)throw Error('Import too large');
+  const data=JSON.parse(await f.text()),records=Array.isArray(data)?data:data.items;
+  if(!Array.isArray(records)||records.length>100)throw Error('Invalid import file');
+  const parsed=records.map(normalizeImported);
+  if(!confirm('Replace the '+items.length+' unsaved rows with '+parsed.length+' imported rows?'))return;
+  items=parsed;render();byId('message').textContent='Imported. Review records, then press Save changes.';
+ }catch(e){byId('message').textContent='Import failed: '+e.message;}
+ finally{event.target.value='';}
+});
+byId('download').addEventListener('click',()=>{
+ const blob=new Blob([JSON.stringify({items},null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='private-family-finance.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),500);
+});
+</script></body></html>
