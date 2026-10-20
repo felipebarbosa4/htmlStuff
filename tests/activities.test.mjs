@@ -63,9 +63,9 @@ test('manual generation: Muse, real route threshold, KV persistence, photo attri
       return response({output:[{type:'message',content:[{type:'output_text',
         text:JSON.stringify({ids,notes:Object.fromEntries(ids.map(id=>[id,{bring:'Water, jacket',why:'Fun for two kids'}]))})}]}]});
     }
+    if(uri.includes('/media?maxWidthPx=720'))return response({photoUri:'https://lh3.googleusercontent.com/demo'});
     if(uri.startsWith('https://places.googleapis.com/v1/places/place_'))
       return response({photos:[{name:'places/place_0_0/photos/demo',authorAttributions:[{displayName:'Photographer',uri:'https://example.org/credit'}]}]});
-    if(uri.includes('/media?maxWidthPx=720'))return response({photoUri:'https://lh3.googleusercontent.com/demo'});
     throw Error('Unexpected mocked endpoint: '+uri);
   };
   try{
@@ -78,6 +78,7 @@ test('manual generation: Muse, real route threshold, KV persistence, photo attri
     assert.equal(data.provider,'Muse Spark');
     assert.equal(data.items.length,8);
     assert.ok(data.items.every(x=>x.km<=20));
+    assert.ok(new Set(data.items.map(x=>x.category)).size>=3,'variety must be enforced');
     assert.ok(!JSON.stringify(data).includes(env.HOME_ADDRESS));
     assert.equal(calls.filter(x=>x==='https://api.meta.ai/v1/responses').length,1);
     const read=await onRequestGet({env});
