@@ -121,3 +121,10 @@
  .finance-pin-entry{height:75px}
  .finance-pin-dots{gap:11px}
 }
+
+/* Readable supporting text against the dark dashboard background. */
+.finance-note{color:#b8ccdd}
+.finance-note strong{color:#e0f3ff}
+.finance-security,.finance-pin-help{color:#b9ccdd}
+.finance-caption,.finance-section-header p,.finance-stat-sub,.finance-meta{color:#b9ccdd}
+.finance-table th,.finance-pagination,.finance-stat-label{color:#b4c9dc}
