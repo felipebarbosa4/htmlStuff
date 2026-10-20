@@ -1,7 +1,7 @@
 // Isolated finance presentation; this public script contains no PIN or private records.
 window.FinancePanel=(()=>{
  const LOCK_MS=2*60*1000;
- let active=false,view=null,within=()=>false,lastActivity=0;
+ let active=false,view=null,within=()=>false,lastActivity=0,expiresAt=0;
  const money=n=>new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'}).format(n);
  const api=async(path,options={})=>{
    const response=await fetch('/api/finance/'+path,{credentials:'same-origin',cache:'no-store',...options});
@@ -12,7 +12,7 @@ window.FinancePanel=(()=>{
  const logout=()=>api('logout',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).catch(()=>{});
  const touch=()=>{if(active)lastActivity=Date.now();};
  function lock(){
-   active=false;lastActivity=0;
+   active=false;lastActivity=0;expiresAt=0;
    if(view?.isConnected){
      const login=view.querySelector('#finance-login'),panel=view.querySelector('#finance-data'),pin=view.querySelector('#finance-pin');
      if(login)login.hidden=false;
@@ -62,7 +62,7 @@ window.FinancePanel=(()=>{
        if(!/^\d{6}$/.test(pin))throw Error('Enter a six-digit code.');
        await api('login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin})});
        if(!section.isConnected||!within()){void logout();return;}
-       active=true;touch();section.querySelector('#finance-pin').value='';
+       active=true;expiresAt=Date.now()+3*60*1000;touch();section.querySelector('#finance-pin').value='';
        section.querySelector('#finance-login').hidden=true;
        section.querySelector('#finance-data').hidden=false;
        await load();
@@ -73,6 +73,6 @@ window.FinancePanel=(()=>{
    section.querySelector('#finance-data').addEventListener('pointerdown',touch);
    section.querySelector('#finance-data').addEventListener('keydown',touch);
  }
- function tick(now){if(active&&now-lastActivity>=LOCK_MS)lock();}
+ function tick(now){if(active&&(now-lastActivity>=LOCK_MS||now>=expiresAt))lock();}
  return {mount,tick,lock};
 })();
