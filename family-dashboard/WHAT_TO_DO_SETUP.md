@@ -66,7 +66,7 @@ Once a protected Preview deployment is available:
 3. Before the first refresh, you should see a placeholder with a manual Refresh Ideas button, **not automatically generated suggestions**.
 4. Click Refresh Ideas once. Confirm 4 cards on the first page, 4 on the second (when 8 destinations qualify), actual photos where available, valid routes, and that all displayed driving distances are <=20 km from home.
 5. Click a card. Verify links (Directions, Website, Google listing), packing advice, price **status**, and today's hours.
-6. Reopen What to Do: it must display the **previous saved list**, with no new Muse or Places search invocation. Photos are resolved separately when visible.
+6. Reopen What to Do: it must display the **previous saved selection**, without invoking Muse or Places **Text Search** again. The server resolves live Google Place Details and Routes on each tab open, and live photo metadata for visible cards. This costs additional Google Maps requests but avoids caching Google place content.
 7. Try Refresh again within 90 seconds: should be throttled; the old list should remain visible.
 8. Temporarily disable a noncritical key in Preview and confirm the saved list is retained on failure.
 9. Check Google API quotas and Cloudflare logs for errors. Never log credentials, exact home address or private calendar titles.
@@ -81,12 +81,12 @@ Do **not** merge simply because the automated mock test passes. Only merge after
 - Eight activities are targeted; fewer may be returned if fewer places qualify. Ranking blends AI input, road distance, opening hours, forecast and ratings.
 - The search presently focuses on **venues** (parks, indoor playgrounds, museums, pools, libraries, animal attractions); it does not yet integrate an official time-specific festival/event ticketing feed.
 - **Real family admission prices are not fetched** in this release. Each card says `Check admission price`, and the details link to the venue website when available. Google's price-level indicator is not a reliable family admission price.
-- Google's present opening hours can change after you generate the list. The list is retained until Refresh or the KV entry expires; by design the cache expires after **28 days**, so you must manually generate new ideas at that point.
+- The saved **selection** remains until Refresh or expires after **28 days**. On every opening, names, addresses, opening hours and road distances are refreshed from Google; if the saved date is no longer today or tomorrow, the time displays **Refresh Ideas for a current time**.
 - Driving distance is calculated from home via Routes API. The Directions link opens Google Maps, which may use the phone/tablet's current location as origin.
 - If the Calendar integration fails or is incomplete, the generation fails closed rather than recommending a conflicting appointment.
 - A Google Calendar all-day event is treated as occupying the whole day. This conservative default can hide otherwise viable options.
-- **Public repo contains no home address or API keys.** The address goes to Google's Geocoding API, weather gets home coordinates, and Meta/OpenAI receive only public venue candidates, time slots and weather summaries (not the residential address or private event names).
-- For data licensing, Google place details are stored with a maximum 28-day KV TTL; live photo resource IDs and URLs are not persisted in KV. Recheck Google's current Maps Platform Terms and attribution requirements before release.
+- **Public repo contains no home address or API keys.** The address goes only to Google's Geocoding API, weather receives home coordinates, and Meta/OpenAI receive only general family details, free time ranges and weather summaries (NO Google Places content, road details, residential address, or private event titles). The AI chooses preferred categories; first-party code combines those priorities with fresh Google Places information.
+- For Google Maps Platform data licensing, **KV stores ONLY place IDs, activity categories, AI-authored notes and timestamps** (maximum 28-day TTL). Never store Google place names, addresses, ratings, business hours, Routes results or photo resource URLs in KV. Details and route distances are re-fetched when opening the tab; photo resources are looked up while rendering. Show visible **Google Maps** attribution and photo creator/source links. Recheck current Google Maps Platform Terms and attribution requirements before release. Confirm the dashboard's privacy policy and terms appropriately disclose Google Maps Platform usage.
 
 ## Troubleshooting
 
