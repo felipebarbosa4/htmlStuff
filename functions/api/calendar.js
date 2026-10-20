@@ -102,8 +102,34 @@ export async function onRequestGet(context) {
       }
     }
     all.sort((a,b)=>Number(b.allDay)-Number(a.allDay) || String(a.start).localeCompare(String(b.start)) || a.title.localeCompare(b.title));
+    // Search the next 30 days for timed appointments (not just today's events).
+    // Keeping several future events per calendar lets the kiosk advance NEXT UP
+    // locally, even if an appointment starts before the next 10-minute refresh.
+    const now=Date.now(), horizon=new Date(now+30*86400000).toISOString();
+    const upcomingResults=await Promise.all(available.map(async cal=>{
+      try{
+        const url='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(cal.id)+'/events?'+new URLSearchParams({
+          timeMin:new Date(now).toISOString(),timeMax:horizon,maxResults:'2500',
+          singleEvents:'true',orderBy:'startTime',showDeleted:'false'
+        });
+        const events=await pages(url,token.access_token,2);
+        return {events:events.filter(e=>e.status!=='cancelled' && e.start?.dateTime && Date.parse(e.start.dateTime)>now)
+          .slice(0,12).map(e=>({
+            id:String(e.id||''),title:String(e.summary||(e.visibility==='private'?'Private event':'Busy')),
+            calendar:String(cal.summary||'Calendar'),
+            color:/^#[0-9a-fA-F]{6}$/.test(cal.backgroundColor||'')?cal.backgroundColor:'#67decf',
+            allDay:false,start:e.start.dateTime,end:e.end?.dateTime||'',
+            location:typeof e.location==='string'?e.location.slice(0,200):''
+          }))};
+      }catch(e){return {error:true,events:[]};}
+    }));
+    const upcomingEvents=upcomingResults.flatMap(x=>x.events)
+      .sort((a,b)=>Date.parse(a.start)-Date.parse(b.start)).slice(0,40);
     const failures=results.filter(x=>x.error).length;
-    return reply({date:selectedDate,timezone:ZONE,calendarCount:available.length,eventCount:all.length,partial:failures>0,failedCalendars:failures,events:all});
+    const upcomingPartial=upcomingResults.some(x=>x.error);
+    return reply({date:selectedDate,timezone:ZONE,calendarCount:available.length,
+      eventCount:all.length,partial:failures>0,failedCalendars:failures,
+      upcomingPartial,upcomingEvents,events:all});
   } catch(e) {
     return reply({error:'Unable to retrieve Google Calendar events. Check the Google authorization and Cloudflare secrets.'},502);
   }
