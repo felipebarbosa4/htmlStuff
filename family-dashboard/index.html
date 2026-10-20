@@ -9,22 +9,21 @@
 .calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
 </style></head>
 <body>
-<header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="meals">Meals</button><button data-mode="night">Night</button></nav></header>
+<header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button></nav></header>
 <main id="stage" aria-live="polite"></main>
 <script>
 'use strict';
 const TZ='America/Toronto';const BASE='../kids-weather-panel/?v=5';
-let manual='auto', visible='',tickCount=0;
-const stages={weather:'8:00–9:00 AM',calendar:'9:00 AM–5:00 PM',meals:'5:00–7:00 PM',night:'After 7:00 PM'};
+let manual='auto', visible='';
 function parts(){const s=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',weekday:'short',month:'short',day:'numeric'}).formatToParts(new Date());return Object.fromEntries(s.filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
-function which(p){const min=Number(p.hour)*60+Number(p.minute);if(min>=480&&min<540)return 'weather';if(min>=540&&min<1020)return 'calendar';if(min>=1020&&min<1140)return 'meals';return 'night';}
+// Automatic schedule in Ottawa local time: night 22:00–06:00, clothes 08:00–08:50, calendar otherwise.
+function which(p){const min=Number(p.hour)*60+Number(p.minute);if(min>=1320||min<360)return 'night';if(min>=480&&min<530)return 'weather';return 'calendar';}
 function setUI(mode){
 const el=document.getElementById('stage');el.replaceChildren();
 if(mode==='weather'){const f=document.createElement('iframe');f.id='frame';f.src=BASE+'&refresh='+Date.now();f.title='Children clothing recommendations for Ottawa';el.appendChild(f);return;}
 const view=document.createElement('section');view.className='view';el.appendChild(view);
-if(mode==='calendar'){view.innerHTML='<div class="small">09:00–17:00 · FAMILY SCHEDULE</div><h1 class="big">📅 Today\'s calendar</h1><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars in the authorized Google account · Refreshes every 10 minutes</p>';loadCalendar(view);}
-else if(mode==='meals')view.innerHTML='<div class="small">17:00–19:00 · FAMILY MEAL IDEAS</div><h1 class="big">🍲 What should we cook?</h1><div class="card"><h2>Muse Spark integration pending</h2><p class="hint">This is the future place for lunch and dinner ideas with ingredients, preparation time and dietary preferences.</p><p class="notice">The Meta API requires a private server-side key. No live AI recommendations are connected yet.</p></div>';
-else view.innerHTML='<div class="small">FAMILY EVENING</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good evening!</h1><p class="dim">The screen can be put to sleep by Fully Kiosk at your chosen time.</p>';
+if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Today\'s calendar</h1><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars in the authorized Google account · Refreshes every 10 minutes</p>';loadCalendar(view);}
+else view.innerHTML='<div class="small">NIGHT MODE · 22:00–06:00</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good night!</h1><p class="dim">Your family schedule returns automatically at 6:00 AM.</p>';
 }
 
 let calendarUpdatedAt=0;
