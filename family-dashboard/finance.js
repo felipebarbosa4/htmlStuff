@@ -44,6 +44,8 @@ window.FinancePanel=(()=>{
    view.querySelector('#finance-summary')?.replaceChildren();
    const pin=view.querySelector('#finance-pin');
    if(pin)pin.value='';
+   view.querySelectorAll('.finance-pin-dot').forEach(dot=>dot.classList.remove('filled'));
+   view.querySelector('#finance-pin-entry')?.removeAttribute('aria-busy');
   }
   void logout();
  }
@@ -208,24 +210,41 @@ window.FinancePanel=(()=>{
  function mount(section,current){
   view=section;within=current;unlocked=false;records=[];page=0;tab='overview';
   section.classList.add('finance-view');
-  section.innerHTML='<div class="finance-shell"><div class="finance-top"><div><div class="finance-kicker">🔒 ÁREA PRIVADA</div><h1 class="finance-heading">Finanças da família</h1><p class="finance-caption">Contas fixas e assinaturas em um só lugar</p></div><button id="finance-lock" class="finance-lock" type="button" hidden>🔒 Bloquear</button></div><section id="finance-login" class="finance-login"><h2>Acesso protegido</h2><p class="finance-caption">Digite o código de 6 números para visualizar.</p><form id="finance-form"><label for="finance-pin">Código de acesso</label><input id="finance-pin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" pattern="[0-9]{6}" required><button type="submit">Abrir finanças</button></form><p class="finance-error" role="alert" id="finance-error"></p><p class="finance-security">Os dados financeiros não ficam salvos no tablet.</p></section><div id="finance-data" hidden><div class="finance-summary" id="finance-summary"></div><nav class="finance-tabs" role="tablist" aria-label="Categorias das finanças"><button type="button" role="tab" class="finance-tab" data-finance-tab="overview" aria-selected="true">📊 Resumo</button><button type="button" role="tab" class="finance-tab" data-finance-tab="essential" aria-selected="false">🏠 Essenciais <span class="finance-count"></span></button><button type="button" role="tab" class="finance-tab" data-finance-tab="subscription" aria-selected="false">🔁 Assinaturas <span class="finance-count"></span></button></nav><div id="finance-content" class="finance-content" role="tabpanel"></div><div id="finance-note" class="finance-note"></div></div></div>';
-  const form=section.querySelector('#finance-form'),submit=form.querySelector('button'),error=section.querySelector('#finance-error');
+  section.innerHTML='<div class="finance-shell"><div class="finance-top"><div><div class="finance-kicker">🔒 ÁREA PRIVADA</div><h1 class="finance-heading">Finanças da família</h1><p class="finance-caption">Contas fixas e assinaturas em um só lugar</p></div><button id="finance-lock" class="finance-lock" type="button" hidden>🔒 Bloquear</button></div><section id="finance-login" class="finance-login"><h2>Acesso protegido</h2><p class="finance-caption">Digite o código de 6 números para visualizar.</p><form id="finance-form"><label for="finance-pin">Código de acesso</label><div class="finance-pin-entry" id="finance-pin-entry"><div class="finance-pin-dots" aria-hidden="true"><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span></div><input id="finance-pin" class="finance-pin-input" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="6" pattern="[0-9]{6}" aria-label="PIN de seis dígitos" aria-describedby="finance-pin-help" required></div><p class="finance-pin-help" id="finance-pin-help">Toque nas bolinhas e digite o PIN. Acesso automático após 6 números.</p></form><p class="finance-error" role="alert" id="finance-error"></p><p class="finance-security">Os dados financeiros não ficam salvos no tablet.</p></section><div id="finance-data" hidden><div class="finance-summary" id="finance-summary"></div><nav class="finance-tabs" role="tablist" aria-label="Categorias das finanças"><button type="button" role="tab" class="finance-tab" data-finance-tab="overview" aria-selected="true">📊 Resumo</button><button type="button" role="tab" class="finance-tab" data-finance-tab="essential" aria-selected="false">🏠 Essenciais <span class="finance-count"></span></button><button type="button" role="tab" class="finance-tab" data-finance-tab="subscription" aria-selected="false">🔁 Assinaturas <span class="finance-count"></span></button></nav><div id="finance-content" class="finance-content" role="tabpanel"></div><div id="finance-note" class="finance-note"></div></div></div>';
+  const form=section.querySelector('#finance-form'),pinInput=section.querySelector('#finance-pin');
+  const pinEntry=section.querySelector('#finance-pin-entry'),dots=[...section.querySelectorAll('.finance-pin-dot')];
+  const error=section.querySelector('#finance-error');
+  let submitting=false;
+  function renderPin(){
+   const numbers=pinInput.value.replace(/\D/g,'').slice(0,6);
+   if(pinInput.value!==numbers)pinInput.value=numbers;
+   dots.forEach((dot,index)=>dot.classList.toggle('filled',index<numbers.length));
+   return numbers;
+  }
+  pinInput.addEventListener('input',()=>{
+   const numbers=renderPin();
+   error.textContent='';
+   if(numbers.length===6&&!submitting&&!unlocked)form.requestSubmit();
+  });
+  pinEntry.addEventListener('click',()=>pinInput.focus());
   form.addEventListener('submit',async event=>{
-   event.preventDefault();submit.disabled=true;error.textContent='';
+   event.preventDefault();
+   if(submitting)return;
+   submitting=true;pinEntry.setAttribute('aria-busy','true');error.textContent='';
    try{
-    const pin=section.querySelector('#finance-pin').value;
+    const pin=renderPin();
     if(!/^\d{6}$/.test(pin))throw Error('Digite um código com 6 números.');
     await api('login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({pin})});
     if(!section.isConnected||!within()){void logout();return;}
     unlocked=true;lastActivity=Date.now();expiresAt=Date.now()+SESSION_MS;
-    section.querySelector('#finance-pin').value='';
+    pinInput.value='';renderPin();
     section.querySelector('#finance-login').hidden=true;
     section.querySelector('#finance-data').hidden=false;
     section.querySelector('#finance-lock').hidden=false;
     await load();
    }catch(e){
     if(section.isConnected){lock();error.textContent=e.message;}
-   }finally{submit.disabled=false;}
+   }finally{submitting=false;pinEntry.removeAttribute('aria-busy');}
   });
   section.querySelector('#finance-lock').addEventListener('click',()=>{lock();view.querySelector('#finance-lock').hidden=true;});
   section.querySelector('#finance-data').addEventListener('pointerdown',touch);
