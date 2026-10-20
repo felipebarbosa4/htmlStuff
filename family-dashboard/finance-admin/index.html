@@ -28,7 +28,7 @@ label{font-size:13px;color:#aec5d8;font-weight:700}
 <header><div><div style="color:#7fe6d8;font-size:13px;letter-spacing:.12em">PRIVATE PC ADMINISTRATION</div><h1>Family Finance Admin</h1></div><button class="secondary" type="button" id="lock" hidden>Lock administration</button></header>
 <p>Manage the household's fixed costs and subscriptions. This page is not linked from the tablet dashboard.</p>
 <section id="login" class="panel">
-<form id="login-form"><div class="field"><label for="password">Administrator password (separate from the tablet PIN)</label><input type="password" id="password" autocomplete="current-password" required minlength="12"></div><p><button type="submit">Sign in</button></p></form>
+<form id="login-form"><div class="field"><label for="password">Finance administration access code</label><input type="password" id="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" required></div><p><button type="submit">Sign in</button></p></form>
 <p id="error" role="alert"></p></section>
 <main id="editor" hidden>
 <div class="panel"><div class="bar"><button type="button" id="add">+ Add expense / subscription</button><button type="button" id="save">Save changes</button><label for="import" class="secondary" style="cursor:pointer;border:1px solid #8ca6bc;padding:10px;border-radius:9px">Import JSON</label><input type="file" id="import" accept=".json,application/json" hidden><button type="button" class="secondary" id="download">Export JSON</button></div>
