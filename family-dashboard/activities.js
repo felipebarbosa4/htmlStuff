@@ -14,7 +14,7 @@ window.ActivitiesPanel={
     const root=element('section','activities-root');
     root.setAttribute('aria-label','Family activity recommendations');
     host.appendChild(root);
-    root.innerHTML='<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub" id="ideas-meta">Activities for Luna, Apollo & family</div></div><button type="button" class="activities-refresh" id="ideas-refresh">↻ Refresh Ideas</button></div><div class="activities-grid" id="ideas-grid" aria-live="polite"></div><div class="activities-footer"><span>📍 Within 20 km of home · Drive time from home</span><div class="activities-pages"><button class="activities-page-btn" id="ideas-prev" aria-label="Previous recommendations">‹</button><span id="ideas-page">1 / 2</span><button class="activities-page-btn" id="ideas-next" aria-label="Next recommendations">›</button></div></div>';
+    root.innerHTML='<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub" id="ideas-meta">Activities for Luna, Apollo & family</div></div><button type="button" class="activities-refresh" id="ideas-refresh">↻ Refresh Ideas</button></div><div class="activities-grid" id="ideas-grid" aria-live="polite"></div><div class="activities-footer"><span>📍 Within 20 km of home · <span class="activities-google">Google Maps</span> driving data</span><div class="activities-pages"><button class="activities-page-btn" id="ideas-prev" aria-label="Previous recommendations">‹</button><span id="ideas-page">1 / 2</span><button class="activities-page-btn" id="ideas-next" aria-label="Next recommendations">›</button></div></div>';
     const grid=root.querySelector('#ideas-grid'),meta=root.querySelector('#ideas-meta'),refresh=root.querySelector('#ideas-refresh');
     const prev=root.querySelector('#ideas-prev'),next=root.querySelector('#ideas-next'),pageLabel=root.querySelector('#ideas-page');
     let items=[],saved=null,page=0,busy=false,error='',modal=null;
@@ -42,6 +42,11 @@ window.ActivitiesPanel={
         people.forEach((person,i)=>{if(i)credit.append(document.createTextNode(', '));
           const url=cleanLink(person.uri);if(url){const a=link(person.name,url);a.addEventListener('click',e=>e.stopPropagation(),{signal});credit.append(a);}
           else credit.append(document.createTextNode(person.name));});
+        if(cleanLink(data.sourceUrl)){
+          const src=element('a','activities-photo-source','Google Maps photo');src.href=cleanLink(data.sourceUrl);
+          src.target='_blank';src.rel='noopener noreferrer';src.addEventListener('click',e=>e.stopPropagation(),{signal});
+          credit.append(document.createTextNode(' · '),src);
+        }
         container.append(credit);
       };
       if(images.has(id)){finish(images.get(id));return;}
