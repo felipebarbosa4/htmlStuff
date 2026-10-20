@@ -184,7 +184,7 @@ export async function onRequestPost(context) {
       }
     }
     if(pool.length<4)throw Error('Fewer than four suitable places with verified driving distances and free time slots');
-    const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate)).slice(0,12)
+    const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
       .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[]);
     const byId=new Map(pool.map(x=>[x.id,x]));
     const preferences=[...new Set([...choice.categories,...queries.map(q=>q[0])])];
