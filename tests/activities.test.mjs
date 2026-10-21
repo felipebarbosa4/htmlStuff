@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {onRequestPost} from '../functions/api/activities/generate.js';
+import {onRequestPost,originPoint} from '../functions/api/activities/generate.js';
 import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 
@@ -115,4 +115,25 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     const denied=await onRequestPost({...ctx,request:new Request('https://dashboard.example.org/api/activities/generate',{method:'POST',headers:{origin:'https://evil.example','content-type':'application/json'},body:'{}'})});
     assert.equal(denied.status,403);
   }finally{global.Date=OriginalDate;global.fetch=originalFetch;}
+});
+
+test('geocoding errors identify the provider status without disclosing home or API key', async()=>{
+  const oldFetch=global.fetch;
+  const env={HOME_ADDRESS:'PRIVATE HOME TEST ADDRESS',GOOGLE_MAPS_API_KEY:'PRIVATE_TEST_KEY'};
+  try{
+    for(const [status,expected] of [
+      ['ZERO_RESULTS','verify HOME_ADDRESS spelling'],
+      ['REQUEST_DENIED','check Geocoding API enabled'],
+      ['OVER_DAILY_LIMIT','verify billing'],
+      ['OVER_QUERY_LIMIT','requests quota reached']
+    ]){
+      global.fetch=async()=>new Response(JSON.stringify({status,error_message:'PRIVATE HOME TEST ADDRESS PRIVATE_TEST_KEY'}));
+      await assert.rejects(()=>originPoint(env),e=>{
+        assert.ok(e.message.includes(expected),e.message);
+        assert.ok(!e.message.includes(env.HOME_ADDRESS));
+        assert.ok(!e.message.includes(env.GOOGLE_MAPS_API_KEY));
+        return true;
+      });
+    }
+  }finally{global.fetch=oldFetch;}
 });
