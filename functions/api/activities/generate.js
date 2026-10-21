@@ -19,13 +19,34 @@ function authOrigin(request) {
   return origin===new URL(request.url).origin && (!site||site==='same-origin');
 }
 export async function originPoint(env) {
+  // Provider status only: never log the full request URL, exact home address,
+  // key, or provider error_message (which can include sensitive input).
+  const address=String(env.HOME_ADDRESS||'').trim();
+  if(!address)throw Error('HOME_ADDRESS secret is empty in this Cloudflare environment');
   const u=new URL('https://maps.googleapis.com/maps/api/geocode/json');
-  u.searchParams.set('address',env.HOME_ADDRESS);
+  u.searchParams.set('address',address);
   u.searchParams.set('key',env.GOOGLE_MAPS_API_KEY);
-  const r=await getJSON(u.toString());
-  const first=r.results?.[0];
-  if(r.status!=='OK'||!first?.geometry?.location)throw Error('Home address could not be geocoded');
-  return first.geometry.location;
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),14000);
+  let resp,data;
+  try {
+    resp=await fetch(u.toString(),{signal:ctrl.signal});
+    data=await resp.json();
+  } catch {
+    throw Error('Google Geocoding network request failed or timed out');
+  } finally {clearTimeout(timer);}
+  const code=String(data?.status||'').toUpperCase();
+  if(code==='OK'&&data.results?.[0]?.geometry?.location)
+    return data.results[0].geometry.location;
+  const messages={
+    ZERO_RESULTS:'Google Geocoding ZERO_RESULTS: verify HOME_ADDRESS spelling, house number and Ottawa, ON, Canada',
+    REQUEST_DENIED:'Google Geocoding REQUEST_DENIED: check Geocoding API enabled and Google key restrictions',
+    OVER_DAILY_LIMIT:'Google Geocoding OVER_DAILY_LIMIT: verify billing, key validity and quota',
+    OVER_QUERY_LIMIT:'Google Geocoding OVER_QUERY_LIMIT: requests quota reached',
+    INVALID_REQUEST:'Google Geocoding INVALID_REQUEST: verify the HOME_ADDRESS secret',
+    UNKNOWN_ERROR:'Google Geocoding UNKNOWN_ERROR: Google could not process the request'
+  };
+  throw Error(messages[code]||('Google Geocoding failed: '+(code||'HTTP '+resp.status)));
 }
 export async function forecast(origin) {
   const u=new URL('https://api.open-meteo.com/v1/forecast');
