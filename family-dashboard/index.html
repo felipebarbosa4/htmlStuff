@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/family-dashboard/finance.css?v=pin-dark-1">
 <style>
 :root{font-family:system-ui,-apple-system,Arial,sans-serif;color:#eef6ff;background:#091424}*{box-sizing:border-box}html,body{margin:0;min-height:100%;}body{display:flex;flex-direction:column;min-height:100vh}.top{padding:12px 18px;display:flex;gap:16px;align-items:center;justify-content:space-between;border-bottom:1px solid #344660;background:#12243b;flex-wrap:wrap}.brand{font-size:18px;font-weight:800}.small{color:#adc0d5;font-size:14px}.controls{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.controls button{border:1px solid #53728e;color:#d4e8ff;background:#1e3552;padding:9px 12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}.controls button.current{color:#062323;background:#73eadb;border-color:#73eadb}#stage{position:relative;flex:1;min-height:65vh}#frame{width:100%;height:calc(100vh - 74px);border:0;background:#091424}.view{padding:clamp(20px,4vw,52px);max-width:1200px;margin:auto}.big{font-size:clamp(33px,6vw,70px);margin:10px 0}.card{border-radius:22px;border:1px solid #405b7a;background:#19304c;padding:25px;max-width:800px;margin:20px 0}.dim{color:#b4c8df}.clock{font-size:clamp(44px,10vw,120px);font-weight:800;font-variant-numeric:tabular-nums}.notice{border-left:4px solid #73eadb;padding:12px 16px;background:#193047}.actions a{display:inline-block;color:#092527;background:#73eadb;padding:14px 18px;border-radius:12px;text-decoration:none;font-weight:800}.hint{line-height:1.7}.foot{font-size:13px;color:#b4c8df;margin-top:20px}@media(max-width:750px){.top{padding:10px}.controls button{padding:9px}#frame{height:calc(100vh - 116px)}}
-.next-up{position:sticky;top:0;z-index:5;min-height:160px;margin:16px 0;padding:18px 22px;border:2px solid #73eadb;border-radius:20px;background:#1b3a55;box-shadow:0 4px 20px #0005}.next-label{font-size:16px;letter-spacing:.1em;color:#8ff6e5;font-weight:800}.next-title{font-size:clamp(24px,4vw,44px);font-weight:800;line-height:1.2;margin:8px 0}.next-meta{font-size:clamp(15px,2vw,22px);font-weight:700}.next-countdown{font-size:18px;color:#9af2e1;font-weight:800;margin-top:8px}.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
+.next-up{position:sticky;top:0;z-index:5;min-height:160px;margin:16px 0;padding:18px 22px;border:2px solid #73eadb;border-radius:20px;background:#1b3a55;box-shadow:0 4px 20px #0005}.next-label{font-size:16px;letter-spacing:.1em;color:#8ff6e5;font-weight:800}.next-title{font-size:clamp(24px,4vw,44px);font-weight:800;line-height:1.2;margin:8px 0}.next-meta{font-size:clamp(15px,2vw,22px);font-weight:700}.next-countdown{font-size:18px;color:#9af2e1;font-weight:800;margin-top:8px}.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.calendar-connection{border-radius:12px;padding:12px 16px;margin:10px 0;background:#183c53;border:1px solid #467b8b;color:#d5eef6;font-size:14px;line-height:1.4}.calendar-connection.auth{background:#493b29;border-color:#927849;color:#fff1d3}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
 </style></head>
 <body>
 <header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button><button data-mode="finance">🔒 Finance</button></nav></header>
@@ -26,11 +26,13 @@ const el=document.getElementById('stage');el.replaceChildren();
 if(mode==='finance'){const view=document.createElement('section');view.className='view';el.appendChild(view);if(window.FinancePanel)FinancePanel.mount(view,()=>visible==='finance');else view.innerHTML='<h1>Finance temporarily unavailable</h1><p class="dim">Try refreshing the page. The calendar and automatic schedule remain available.</p>';return;}
 if(mode==='weather'){const f=document.createElement('iframe');f.id='frame';f.src=BASE+'&refresh='+Date.now();f.title='Children clothing recommendations for Ottawa';el.appendChild(f);return;}
 const view=document.createElement('section');view.className='view';el.appendChild(view);
-if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Family calendar</h1><div class="next-up" aria-label="Next appointment"><div class="next-label">⏭ NEXT UP</div><div class="next-title" id="next-title">Finding your next appointment…</div><div class="next-meta" id="next-meta"></div><div class="next-countdown" id="next-countdown"></div></div><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars · Updates every 10 minutes</p>';calendarLoaded=false;loadCalendar(view);}
+if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Family calendar</h1><div class="next-up" aria-label="Next appointment"><div class="next-label">⏭ NEXT UP</div><div class="next-title" id="next-title">Finding your next appointment…</div><div class="next-meta" id="next-meta"></div><div class="next-countdown" id="next-countdown"></div></div><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div class="calendar-connection" id="calendar-connection" role="status" hidden></div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars · Updates every 10 minutes</p>';calendarLoaded=false;loadCalendar(view);}
 else view.innerHTML='<div class="small">NIGHT MODE · 22:00–06:00</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good night!</h1><p class="dim">Your family schedule returns automatically at 6:00 AM.</p>';
 }
 
-let calendarUpdatedAt=0;
+// In-memory only: private calendar entries are never written to browser storage.
+let calendarUpdatedAt=0,calendarNextAttemptAt=0,calendarLoading=false;
+let calendarRetryCount=0,calendarLastSync=0,calendarDataDate='',calendarRenderedMinute=-1;
 function ottawaDate(){
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
  const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
@@ -55,47 +57,116 @@ function updateNextUp(now=Date.now()){
  const hours=Math.floor(minutes/60),days=Math.floor(hours/24);
  countdown.textContent=minutes<60?'In '+minutes+' min':hours<24?'In '+hours+' hr'+(minutes%60?' '+minutes%60+' min':''):'In '+days+' day(s)'+(hours%24?' '+hours%24+' hr':'');
 }
-async function loadCalendar(view){
- if(!view?.isConnected || visible!=='calendar')return;
- const info=view.querySelector('#calendar-info'),target=view.querySelector('#calendar-events');
- if(!info||!target)return;
- calendarUpdatedAt=Date.now();
- info.textContent='Checking all calendars for today…';
+function connectionMessage(view,message,requiresLogin=false){
+ const target=view.querySelector('#calendar-connection');
+ if(!target)return;
+ target.hidden=!message;
+ target.textContent=message||'';
+ target.classList.toggle('auth',requiresLogin);
+}
+function drawCalendarList(view,now=Date.now()){
+ if(!calendarLoaded||!view?.isConnected||visible!=='calendar')return;
+ const minute=Math.floor(now/60000);
+ if(calendarRenderedMinute===minute)return;
+ calendarRenderedMinute=minute;
+ const target=view.querySelector('#calendar-events');
+ if(!target)return;
  target.replaceChildren();
+ const events=calendarEvents.filter(e=>e.allDay||(Number.isFinite(Date.parse(e.end||e.start))&&Date.parse(e.end||e.start)>now));
+ if(!events.length){
+  const empty=document.createElement('div');empty.className='agenda-empty';
+  empty.textContent='No more appointments today. The next upcoming appointment is shown above.';
+  target.appendChild(empty);return;
+ }
+ let placedAllDay=false,placedTimed=false;
+ for(const event of events){
+  if(event.allDay&&!placedAllDay){placedAllDay=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='ALL DAY';target.appendChild(h);}
+  if(!event.allDay&&!placedTimed){placedTimed=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='APPOINTMENTS';target.appendChild(h);}
+  const row=document.createElement('article');row.className='agenda-row';
+  const time=document.createElement('div');time.className='agenda-time';
+  time.textContent=event.allDay?'All day':eventTime(event.start)+(event.end?' – '+eventTime(event.end):'');
+  const card=document.createElement('div');card.className='agenda-event';
+  if(/^#[0-9a-fA-F]{6}$/.test(event.color||''))card.style.borderLeftColor=event.color;
+  const title=document.createElement('h2');title.textContent=event.title||'Busy';
+  const sub=document.createElement('div');sub.className='agenda-meta';
+  sub.textContent=(event.calendar||'Calendar')+(event.location?' · '+event.location:'');
+  card.append(title,sub);row.append(time,card);target.appendChild(row);
+ }
+}
+function calendarClock(time){
+ return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(time);
+}
+async function loadCalendar(view){
+ if(calendarLoading||!view?.isConnected||visible!=='calendar')return;
+ const info=view.querySelector('#calendar-info');
+ const target=view.querySelector('#calendar-events');
+ if(!info||!target)return;
  const date=ottawaDate();
- try {
-   const resp=await fetch('/api/calendar?date='+encodeURIComponent(date),{credentials:'same-origin',cache:'no-store'});
-   if(!resp.headers.get('content-type')?.includes('application/json'))throw Error('Authentication may have expired. Sign in to the dashboard again.');
-   const data=await resp.json();
-   if(!resp.ok)throw Error(data.error||'Calendar API unavailable');
-   if(!view.isConnected || visible!=='calendar')return;
-   calendarEvents=Array.isArray(data.events)?data.events:[];
-   calendarUpcoming=Array.isArray(data.upcomingEvents)?data.upcomingEvents:[];
-   calendarLoaded=true;
+ if(calendarDataDate&&calendarDataDate!==date){
+  // Never display a previous day's appointments as though they were today's.
+  calendarLoaded=false;calendarEvents=[];calendarUpcoming=[];
+  calendarLastSync=0;calendarDataDate='';calendarRenderedMinute=-1;
+ }
+ calendarLoading=true;
+ calendarUpdatedAt=Date.now();
+ if(!calendarLoaded)info.textContent='Connecting to your family calendars…';
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),25000);
+ try{
+  // Manual redirect reveals expired Cloudflare Access without a cross-origin CORS failure.
+  const resp=await fetch('/api/calendar?date='+encodeURIComponent(date),{
+   credentials:'same-origin',cache:'no-store',redirect:'manual',signal:controller.signal
+  });
+  if(resp.type==='opaqueredirect') {
+   const error=new Error('Cloudflare Access login needs renewal.');
+   error.needsLogin=true;throw error;
+  }
+  if(!resp.headers.get('content-type')?.includes('application/json')){
+   const error=new Error('Cloudflare Access session may have expired.');
+   error.needsLogin=true;throw error;
+  }
+  const data=await resp.json();
+  if(!resp.ok){
+   const error=new Error(data.error||'Calendar API HTTP '+resp.status);
+   error.needsLogin=resp.status===401||resp.status===403;throw error;
+  }
+  if(!view.isConnected||visible!=='calendar')return;
+  calendarEvents=Array.isArray(data.events)?data.events:[];
+  calendarUpcoming=Array.isArray(data.upcomingEvents)?data.upcomingEvents:[];
+  calendarLoaded=true;calendarDataDate=date;calendarLastSync=Date.now();
+  calendarRetryCount=0;calendarNextAttemptAt=Date.now()+10*60*1000;
+  calendarRenderedMinute=-1;
+  const eventCount=Number.isFinite(Number(data.eventCount))?data.eventCount:calendarEvents.length;
+  info.textContent=eventCount+' event'+(eventCount===1?'':'s')+' today · '+data.calendarCount+' calendars · updated '+calendarClock(calendarLastSync);
+  connectionMessage(view,data.partial?'Some calendars could not be loaded. Automatic refresh is active.':'');
+  updateNextUp();drawCalendarList(view);
+ }catch(error){
+  if(!view.isConnected||visible!=='calendar')return;
+  calendarRetryCount++;
+  const backoff=Math.min(120000,15000*Math.pow(2,Math.min(calendarRetryCount-1,3)));
+  calendarNextAttemptAt=Date.now()+backoff;
+  const requiresLogin=Boolean(error.needsLogin);
+  const retryText='Automatic retry in '+Math.ceil(backoff/1000)+' seconds.';
+  const reason=requiresLogin?'Cloudflare login expired. Open the dashboard in Fully Kiosk and sign in again.':
+   error.name==='AbortError'?'Calendar request timed out.': 'Wi-Fi, internet or Cloudflare connection unavailable.';
+  if(calendarLoaded && calendarDataDate===date){
+   // Keep the previously loaded appointments visible, marked as potentially stale.
+   info.textContent='Last successful update '+calendarClock(calendarLastSync)+' · reconnecting';
+   connectionMessage(view,reason+' Showing the last loaded appointments; changes may be missing. '+retryText,requiresLogin);
    updateNextUp();
-   info.textContent=data.eventCount+' event'+(data.eventCount===1?'':'s')+' today · '+data.calendarCount+' calendars'+(data.partial?' · Some calendars could not be loaded':'');
-   const events=calendarEvents.filter(e=>e.allDay || Date.parse(e.end||e.start)>Date.now());
-   if(!events.length){const b=document.createElement('div');b.className='agenda-empty';b.textContent='No appointments today. Enjoy your free time!';target.appendChild(b);return;}
-   let placedAllDay=false,placedTimed=false;
-   for(const event of events){
-     if(event.allDay&&!placedAllDay){placedAllDay=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='ALL DAY';target.appendChild(h);}
-     if(!event.allDay&&!placedTimed){placedTimed=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='APPOINTMENTS';target.appendChild(h);}
-     const row=document.createElement('article');row.className='agenda-row';
-     const time=document.createElement('div');time.className='agenda-time';time.textContent=event.allDay?'All day':eventTime(event.start)+(event.end?' – '+eventTime(event.end):'');
-     const card=document.createElement('div');card.className='agenda-event';
-     if(/^#[0-9a-fA-F]{6}$/.test(event.color||''))card.style.borderLeftColor=event.color;
-     const title=document.createElement('h2');title.textContent=event.title||'Busy';
-     const sub=document.createElement('div');sub.className='agenda-meta';sub.textContent=event.calendar+(event.location?' · '+event.location:'');
-     card.append(title,sub);row.append(time,card);target.appendChild(row);
-   }
- }catch(e){
-   if(!view.isConnected || visible!=='calendar')return;
-   info.textContent='Calendar connection needs attention';
+  }else{
    calendarLoaded=false;
-   const nextTitle=document.getElementById('next-title');if(nextTitle)nextTitle.textContent='Calendar unavailable — retrying automatically';
-   const b=document.createElement('div');b.className='agenda-empty';
-   b.textContent=e.message+'. The dashboard remains private; no calendar data has been published.';
-   target.appendChild(b);
+   info.textContent='Calendar connection needs attention · reconnecting';
+   const title=view.querySelector('#next-title'),meta=view.querySelector('#next-meta'),countdown=view.querySelector('#next-countdown');
+   if(title)title.textContent='Connecting to your calendar…';
+   if(meta)meta.textContent='No appointments loaded yet';
+   if(countdown)countdown.textContent='';
+   target.replaceChildren();
+   connectionMessage(view,reason+' '+retryText,requiresLogin);
+  }
+ }finally{
+  clearTimeout(timeout);
+  calendarLoading=false;
  }
 }
 
@@ -121,7 +192,9 @@ function render(){
  if(selected!==visible){if(visible==='finance'&&window.FinancePanel)FinancePanel.lock();visible=selected;setUI(selected);}
  if(window.FinancePanel)FinancePanel.tick(now);
  if(selected==='calendar'){
-   if(now-calendarUpdatedAt>10*60*1000){const v=document.querySelector('#stage .view');if(v)loadCalendar(v);}
+   const v=document.querySelector('#stage .view');
+   if(v && !calendarLoading && (now>=calendarNextAttemptAt || (calendarDataDate && calendarDataDate!==ottawaDate())))loadCalendar(v);
+   if(v)drawCalendarList(v,now);
    updateNextUp(now);
  }
  const c=document.getElementById('large-clock');if(c)c.textContent=p.hour+':'+p.minute;
@@ -131,7 +204,9 @@ for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('clic
  manual=b.dataset.mode;manualUntil=manual==='auto'?0:Date.now()+MANUAL_DURATION;
  visible='';render();
 });
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){calendarNextAttemptAt=0;render();}});
+window.addEventListener('online',()=>{calendarNextAttemptAt=0;render();});
+window.addEventListener('pageshow',()=>{calendarNextAttemptAt=0;render();});
 setInterval(render,15000);render();
 </script>
 </body></html>
