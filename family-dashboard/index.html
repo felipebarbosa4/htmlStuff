@@ -206,7 +206,7 @@ for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('clic
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){calendarNextAttemptAt=0;render();}});
 window.addEventListener('online',()=>{calendarNextAttemptAt=0;render();});
-window.addEventListener('pageshow',()=>{calendarNextAttemptAt=0;render();});
+window.addEventListener('pageshow',event=>{if(event.persisted){calendarNextAttemptAt=0;render();}});
 setInterval(render,15000);render();
 </script>
 </body></html>
