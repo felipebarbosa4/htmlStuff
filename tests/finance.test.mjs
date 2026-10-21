@@ -120,3 +120,17 @@ test('Finance UI uses six private PIN dots and a dark dashboard theme',async()=>
  assert.match(css,/\.finance-pin-entry:focus-within/);
  assert.ok(!css.includes('background:#fafbf9'),'Finance cannot revert to the old light background');
 });
+
+test('Calendar recovers without wiping cached events on a transient network failure',async()=>{
+ const html=await readFile(new URL('../family-dashboard/index.html',import.meta.url),'utf8');
+ assert.match(html,/redirect:'manual'/,'detect Cloudflare Access login redirect before CORS failure');
+ assert.match(html,/resp\.type==='opaqueredirect'/,'classify expired Cloudflare Access');
+ assert.match(html,/const backoff=Math\.min\(120000,15000\*/,'retry begins after 15 seconds, not 10 minutes');
+ assert.match(html,/calendarNextAttemptAt=Date\.now\(\)\+10\*60\*1000/,'keep 10 minute refresh after successful requests');
+ assert.match(html,/if\(calendarLoaded && calendarDataDate===date\)/,'preserve last loaded events on errors');
+ assert.match(html,/updateNextUp\(\);drawCalendarList\(view\)/,'restore NEXT UP and agenda on success');
+ assert.match(html,/target\.replaceChildren\(\);\s*connectionMessage\(view,reason/,'clear stale NEXT UP when nothing was loaded');
+ assert.match(html,/addEventListener\('online'/,'reconnect immediately when online');
+ assert.match(html,/calendarRenderedMinute=-1;calendarNextAttemptAt=0/,'restore cached agenda when switching from clothes');
+ assert.doesNotMatch(html,/localStorage\.setItem\([^)]*calendarEvents/,'never persist private events to unencrypted storage');
+});
