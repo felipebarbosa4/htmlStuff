@@ -109,23 +109,20 @@ async function selectWithAI(env,date,forecastSummary,earliest,blocked) {
     'Each category note should be practical, age appropriate, and not name any specific business.';
   const input=instruction+'\nDate: '+date+'; first available departure minute after midnight: '+earliest+
     '; busy time ranges (minutes): '+JSON.stringify(blocked)+'\nWeather: '+forecastSummary;
-  const providers=[
-    env.MODEL_API_KEY&&{url:'https://api.meta.ai/v1/responses',key:env.MODEL_API_KEY,model:'muse-spark-1.3',label:'Muse Spark'},
-    env.OPENAI_API_KEY&&{url:'https://api.openai.com/v1/responses',key:env.OPENAI_API_KEY,model:'gpt-5-mini',label:'OpenAI'}
-  ].filter(Boolean);
-  if(!providers.length)throw Error('Set MODEL_API_KEY or OPENAI_API_KEY in Cloudflare secrets');
-  for(const provider of providers) {
-    try{
-      const data=await getJSON(provider.url,{method:'POST',
-        headers:{authorization:'Bearer '+provider.key,'content-type':'application/json'},
-        body:JSON.stringify({model:provider.model,input,store:false,max_output_tokens:1800})});
-      const parsed=parseChoice(data);
-      const ordered=[...new Set(parsed.categories.filter(x=>categories.includes(x)))];
-      if(ordered.length<3)throw Error('AI did not return enough distinct activity types');
-      return {categories:ordered,notes:parsed.notes||{},provider:provider.label};
-    }catch(e){/* Try OpenAI if Muse is unavailable, invalid or timed out. */}
-  }
-  throw Error('Neither Muse Spark nor OpenAI returned usable category suggestions');
+  if(!env.OPENAI_API_KEY)throw Error('Add OPENAI_API_KEY as a Cloudflare secret');
+  const data=await getJSON('https://api.openai.com/v1/responses',{
+    method:'POST',
+    headers:{authorization:'Bearer '+env.OPENAI_API_KEY,'content-type':'application/json'},
+    body:JSON.stringify({
+      model:'gpt-6-luna',
+      reasoning:{effort:'none'},
+      input,store:false,max_output_tokens:1800
+    })
+  });
+  const parsed=parseChoice(data);
+  const ordered=[...new Set(parsed.categories.filter(x=>categories.includes(x)))];
+  if(ordered.length<3)throw Error('OpenAI did not return enough distinct activity types');
+  return {categories:ordered,notes:parsed.notes||{},provider:'GPT-6 Luna'};
 }
 export async function onRequestPost(context) {
   const {request,env}=context;
@@ -133,8 +130,8 @@ export async function onRequestPost(context) {
   if(!request.headers.get('content-type')?.startsWith('application/json'))return json({error:'JSON required'},415);
   if(!env.ACTIVITIES_KV||!env.GOOGLE_MAPS_API_KEY||!env.HOME_ADDRESS)
     return json({error:'Activities setup incomplete: KV, Google Maps key, or private home address is missing.'},503);
-  if(!env.MODEL_API_KEY&&!env.OPENAI_API_KEY)
-    return json({error:'Add a Muse Model API key or OpenAI API key to Cloudflare secrets.'},503);
+  if(!env.OPENAI_API_KEY)
+    return json({error:'Add OPENAI_API_KEY to Cloudflare secrets.'},503);
   try{
     const last=Number(await env.ACTIVITIES_KV.get(CACHE_KEY+':last-request')||0);
     if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
