@@ -1,6 +1,7 @@
 import {CACHE_KEY,MAX_KM,json,local,addDay,ranges,hourText,getJSON} from './activities/shared.js';
 import {originPoint,forecast,routes,openingLabel,scheduleFor} from './activities/generate.js';
 import {onRequestGet as calendarGet} from './calendar.js';
+import {keyFor,normalizeOptions} from './activities/config.js';
 
 const placeMask='id,displayName,formattedAddress,businessStatus,currentOpeningHours,googleMapsUri,websiteUri,attributions';
 const MAPS='https://places.googleapis.com/v1/places/';
@@ -11,7 +12,8 @@ export async function onRequestGet(context) {
   const {env,request}=context;
   if(!env.ACTIVITIES_KV)return json({error:'Activities storage is not configured.'},503);
   try {
-    const saved=await env.ACTIVITIES_KV.get(CACHE_KEY,'json');
+    const mode=normalizeOptions({mode:new URL(request.url).searchParams.get('mode')}).mode;
+    const saved=await env.ACTIVITIES_KV.get(keyFor(mode),'json');
     if(!saved||!Array.isArray(saved.items)||!saved.items.length)
       return json({items:[],generatedAt:null,provider:null,date:null});
     if(!env.GOOGLE_MAPS_API_KEY||!env.HOME_ADDRESS)
