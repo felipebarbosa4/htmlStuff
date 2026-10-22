@@ -249,3 +249,34 @@
   .activities-root.activities-ideas .activities-description{padding:3px 6px;gap:1px}
   .activities-root.activities-ideas .activities-line{font-size:10px}
 }
+
+/* TMDB user score is distinct from Canada's age certification. */
+.activities-root.activities-movies .activities-movie-badges{
+ display:flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap
+}
+.activities-root.activities-movies .activities-score{
+ display:inline-flex;align-items:center;justify-content:center;
+ color:#082d2f;background:#73eadb;border-radius:7px;padding:3px 6px;
+ font-size:clamp(12px,1.15vw,15px);line-height:1.2;font-weight:900;font-variant-numeric:tabular-nums
+}
+/* Larger, accessible trailer control; still fits the 2 x 2 and 2 x 3 movie grids. */
+.activities-root.activities-movies .activities-card-movie .activities-trailer-link{
+ display:inline-flex;align-items:center;justify-content:center;align-self:flex-start;
+ gap:7px;min-height:34px;padding:4px 11px;border:1px solid #68ddcc;
+ border-radius:10px;background:#1b4f5c;color:#a2fff1;font-size:clamp(14px,1.36vw,17px);
+ font-weight:900;line-height:1.2;text-decoration:none;cursor:pointer;white-space:nowrap
+}
+.activities-root.activities-movies .activities-play-icon{font-size:19px;line-height:1}
+.activities-root.activities-movies .activities-card-movie .activities-trailer-link:focus-visible{
+ outline:2px solid #a2fff1;outline-offset:2px
+}
+.activities-root.activities-movies .activities-card-movie .activities-trailer-link:hover{
+ background:#266d78;color:white
+}
+@media(max-height:730px){
+ .activities-root.activities-movies .activities-card-movie .activities-trailer-link{
+  min-height:30px;padding:3px 8px;font-size:14px
+ }
+ .activities-root.activities-movies .activities-play-icon{font-size:17px}
+ .activities-root.activities-movies .activities-score{font-size:12px;padding:2px 5px}
+}

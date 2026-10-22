@@ -6,7 +6,7 @@ import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
 import {onRequestPost as savePreference,onRequestGet as listPreferences} from '../functions/api/activities/feedback.js';
 import {onRequestPost as discover,onRequestGet as listedDiscovery} from '../functions/api/activities/discover.js';
-import {tmdbMovies} from '../functions/api/activities/providers.js';
+import {tmdbMovies,movieOverviewPtBr,tmdbUserScore} from '../functions/api/activities/providers.js';
 import {normalizeOptions,learnedCounts} from '../functions/api/activities/config.js';
 import {hoursForDate} from '../functions/api/activities/hours.js';
 import {sanitizeEnrichment,priceDisplay,factsDisplay,venueFacts} from '../functions/api/activities/enrich.js';
@@ -230,8 +230,9 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
       if(u.includes('/movie/')&&u.includes('append_to_response=')){
         const id=Number(new URL(u).pathname.split('/')[3]);
         const cert=id===1?'PG':id===2?'14A':'';
-        assert.equal(new URL(u).searchParams.get('append_to_response'),'release_dates,videos,watch/providers');
-        return response({overview:'An adventure from the TMDB synopsis.',
+        assert.equal(new URL(u).searchParams.get('append_to_response'),'release_dates,videos,watch/providers,translations');
+        return response({overview:'An adventure from the TMDB synopsis.',vote_average:8.14,vote_count:320,
+          translations:{translations:[{iso_639_1:'pt',iso_3166_1:'BR',data:{overview:'Uma aventura em português brasileiro.'}}]},
           release_dates:{results:[{iso_3166_1:'CA',
             release_dates:[{type:3,release_date:'2026-10-09T00:00:00Z',certification:cert}]}]},
           videos:{results:[{site:'YouTube',type:'Trailer',official:true,key:'dQw4w9WgXcQ'}]},
@@ -250,7 +251,11 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
     assert.deepEqual(result.items.map(x=>x.name),['Family Film']);
     assert.equal(result.items[0].rating,'PG');
     assert.equal(calls.filter(x=>x.includes('/movie/1?append_to_response')).length,1);
-    assert.ok(result.items[0].synopsis.includes('TMDB synopsis'));
+    assert.equal(result.items[0].synopsis,'Uma aventura em português brasileiro.');
+    assert.equal(result.items[0].synopsisLocale,'pt-BR');
+    assert.equal(result.items[0].userScorePercent,81);
+    assert.equal(result.items[0].userScoreVotes,320);
+    assert.equal(result.items[0].metadataVersion,2);
     assert.equal(result.items[0].posterUrl,'https://image.tmdb.org/t/p/w342/poster.jpg');
     assert.equal(result.items[0].trailerUrl,'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     assert.deepEqual(result.items[0].watch.subscription,['Netflix']);
@@ -395,10 +400,11 @@ test('TMDB fetches up to 12 distinct CA theatrical movies, prioritizes month and
         return new Response(JSON.stringify({results:Array.from({length:18},(_,i)=>({id:i+4,title:'Recent title '+i})),total_pages:1}));
       }
       if(u.pathname.startsWith('/3/movie/')){
-        assert.equal(u.searchParams.get('append_to_response'),'release_dates,videos,watch/providers');
+        assert.equal(u.searchParams.get('append_to_response'),'release_dates,videos,watch/providers,translations');
         const id=Number(u.pathname.split('/')[3]);
         const recent=id>3;
-        return new Response(JSON.stringify({overview:'Verified from TMDB',release_dates:{results:[{
+        return new Response(JSON.stringify({overview:'Verified from TMDB',vote_average:7.7,vote_count:123,
+          translations:{translations:[{iso_639_1:'pt',iso_3166_1:'BR',data:{overview:'Sinopse brasileira verificada'}}]},release_dates:{results:[{
           iso_3166_1:'CA',release_dates:[{type:3,release_date:recent?'2026-09-10T00:00:00Z':'2026-10-10T00:00:00Z',certification:'PG'}]
         }]},'watch/providers':{results:{}},videos:{results:[]}}));
       }
@@ -410,6 +416,7 @@ test('TMDB fetches up to 12 distinct CA theatrical movies, prioritizes month and
     assert.ok(result.slice(0,3).every(x=>x.releaseDate==='2026-10-10'));
     assert.ok(result.slice(3).every(x=>x.releaseDate==='2026-09-10'));
     assert.ok(result.every(x=>x.rating==='PG'));
+    assert.ok(result.every(x=>x.userScorePercent===77&&x.synopsis==='Sinopse brasileira verificada'));
     assert.ok(calls.some(x=>x.includes('release_date.gte=2026-10-01')));
     assert.ok(calls.some(x=>x.includes('release_date.gte=2026-06')));
     assert.ok(!calls.some(x=>x.includes('api.openai.com')));
@@ -488,4 +495,35 @@ test('cached venue descriptions are translated once on Refresh without re-resear
     await venueFacts(env,[{id,name:'Example Venue',category:'park'}],{research:true});
     assert.equal(calls.length,1,'Translated cache stays valid without new AI calls');
   }finally{global.fetch=oldFetch;}
+});
+
+test('TMDB rating is user score 0–10 converted to percent only with votes, never age certification',()=>{
+  assert.deepEqual(tmdbUserScore({vote_average:8.1,vote_count:502},{}),{percent:81,votes:502});
+  assert.deepEqual(tmdbUserScore({vote_average:0,vote_count:0},{}),{percent:null,votes:0});
+  assert.deepEqual(tmdbUserScore({vote_average:9.9,vote_count:0},{}),{percent:null,votes:0});
+  assert.deepEqual(tmdbUserScore({vote_average:11,vote_count:8},{}),{percent:null,votes:0});
+  assert.deepEqual(tmdbUserScore({}, {vote_average:7.6,vote_count:15}),{percent:76,votes:15});
+});
+test('TMDB pt-BR overview uses published Brazil translation and never pretends English text is translated',()=>{
+  const details={overview:'An English description.',translations:{translations:[
+    {iso_639_1:'pt',iso_3166_1:'PT',data:{overview:'Um filme em português de Portugal'}},
+    {iso_639_1:'pt',iso_3166_1:'BR',data:{overview:'Uma sinopse em português brasileiro.'}}
+  ]}};
+  assert.deepEqual(movieOverviewPtBr(details),{text:'Uma sinopse em português brasileiro.',locale:'pt-BR'});
+  const missing=movieOverviewPtBr({overview:'English-only original',translations:{translations:[]}});
+  assert.equal(missing.locale,'pt-BR');
+  assert.equal(missing.available,false);
+  assert.match(missing.text,/não disponível/);
+  assert.ok(!missing.text.includes('English-only'));
+});
+test('saved TMDB movie backfill keeps prior-month films on GET without a second API call',async()=>{
+  const current='2026-10-12',prior='2026-09-11';
+  const saved={kind:'movies',items:[{name:'October movie',releaseDate:current},
+    {name:'September movie',releaseDate:prior}]};
+  const env={ACTIVITIES_KV:{get:async(k)=>k.endsWith('tmdb-v3:family')?saved:null}};
+  const res=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
+  assert.equal(res.status,200);
+  const data=await res.json();
+  assert.equal(data.items.length,2);
+  assert.deepEqual(data.items.map(x=>x.releaseDate),[current,prior]);
 });

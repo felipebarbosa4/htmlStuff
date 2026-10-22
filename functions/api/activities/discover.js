@@ -122,7 +122,9 @@ export async function onRequestGet({request,env}){
     const saved=await env.ACTIVITIES_KV.get(keyword(kind,mode,opts.maxKm),'json');
     if(!saved)return json({items:[],kind,mode,generatedAt:null});
     const now=local();
-    const items=(saved.items||[]).filter(x=>kind==='movies'?x.releaseDate?.startsWith(now.date.slice(0,7)):
+    // TMDB backfills recent months to reach 12 valid releases. Keep those
+    // legitimately saved movies; excluding them on GET loses most of the list.
+    const items=(saved.items||[]).filter(x=>kind==='movies'?/^\d{4}-\d{2}-\d{2}$/.test(x.releaseDate||''):
       x.date===now.date&&x.time&&(Number(x.time.slice(0,2))*60+Number(x.time.slice(3)))>=now.minute);
     return json({...saved,items});
   }catch{return json({error:'Saved discovery could not be loaded'},502);}

@@ -37,6 +37,12 @@ const admissionPt=p=>p?.perPerson===0?'Entrada gratuita (confirmada)':
   Number.isFinite(p?.perPerson)?'≈ '+moneyPt(p.perPerson)+'/pessoa (ingresso)':'Ingresso não confirmado';
 
 const watchNames=x=>(Array.isArray(x)?x:[]).join(', ');
+const movieScore=x=>Number.isInteger(x?.userScorePercent)&&x.userScorePercent>=0&&x.userScorePercent<=100&&
+  Number.isInteger(x.userScoreVotes)&&x.userScoreVotes>0?x.userScorePercent:null;
+const movieSynopsis=x=>x?.metadataVersion>=2&&x?.synopsisLocale==='pt-BR'?
+  x.synopsis||'Sinopse ainda não disponível em português na TMDB.':
+  'Clique em Find Movies para carregar a sinopse em português.';
+
 const stamp=s=>{const t=Date.parse(s);return Number.isFinite(t)?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(t):'Not generated'};
 const fmt=()=>{
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date());
@@ -252,9 +258,10 @@ window.ActivitiesPanel={
       ].filter(Boolean).join(' · '):
       'No Canadian streaming providers listed (check back later)';
     const lines=item.kind==='movies'?[
-      '🍿 Canadian theatrical release: '+item.releaseDate,
-      '🎫 Canadian rating: '+item.rating,
-      '📝 '+(item.synopsis||item.reason||'Synopsis not available'),
+      '🍿 Estreia no Canadá: '+item.releaseDate,
+      '🎫 Classificação etária canadense: '+item.rating,
+      '⭐ Nota dos usuários TMDB: '+(movieScore(item)===null?'Ainda sem avaliações':movieScore(item)+'% ('+item.userScoreVotes+' votos)'),
+      '📝 Sinopse: '+movieSynopsis(item),
       '📺 Watch in Canada: '+where,
       '🕒 Local cinema showtimes: Not verified',
       'ℹ Streaming information: JustWatch via TMDB; may change by date.',
@@ -297,7 +304,7 @@ window.ActivitiesPanel={
       if(item.kind==='events'&&URLSAFE(item.ticketUrl))actions.append(link('🎟 Tickets / organizer',item.ticketUrl));
       if(item.kind==='movies'){
         if(trailerId(item.trailerUrl)){
-          const play=el('button','activities-modal-play','▶ Play trailer here');play.type='button';
+          const play=el('button','activities-modal-play','▶ Assistir trailer aqui');play.type='button';
           play.addEventListener('click',()=>openTrailer(item),{signal});
           actions.prepend(play);
         }
@@ -345,21 +352,32 @@ window.ActivitiesPanel={
     }else photo.append(el('span','activities-photo-placeholder',item.kind==='movies'?'🎬':'🎟️'));
     const content=el('div','activities-description');
     const heading=el('div','activities-heading');
-    heading.append(el('strong','activities-name',item.name),
-      el('span','activities-type',item.kind==='movies'?item.rating:item.kind==='events'?'EVENT':item.category.toUpperCase()));
+    heading.append(el('strong','activities-name',item.name));
+    if(item.kind==='movies'){
+      const badges=el('div','activities-movie-badges');
+      if(movieScore(item)!==null){
+        const score=el('span','activities-score','★ '+movieScore(item)+'%');
+        score.title='Nota média dos usuários TMDB ('+item.userScoreVotes+' votos), não classificação etária';
+        score.setAttribute('aria-label','Nota dos usuários TMDB: '+movieScore(item)+' por cento');
+        badges.append(score);
+      }
+      badges.append(el('span','activities-type',item.rating));
+      heading.append(badges);
+    }else heading.append(el('span','activities-type',item.kind==='events'?'EVENT':item.category.toUpperCase()));
     content.append(heading);
     if(item.kind==='movies'){
-      content.append(el('div','activities-line','📅 Canada release: '+item.releaseDate+' · '+item.rating));
+      content.append(el('div','activities-line','📅 Estreia no Canadá: '+item.releaseDate+' · '+item.rating));
       const streaming=watchNames(item.watch?.subscription),free=watchNames(item.watch?.free);
       content.append(el('div','activities-line',
         streaming||free?'📺 Canada: '+[streaming,free].filter(Boolean).join(' / '):
         '📺 '+(item.watch?.verified?'Not listed on Canadian streaming':'Streaming not verified')));
       if(trailerId(item.trailerUrl)){
-        const play=el('button','activities-trailer-link','▶ Play trailer');play.type='button';
+        const play=el('button','activities-trailer-link');play.type='button';
+        play.append(el('span','activities-play-icon','▶'),document.createTextNode(' Ver trailer'));
         play.addEventListener('click',e=>{e.stopPropagation();openTrailer(item);},{signal});
         content.append(play);
       }
-      content.append(el('div','activities-line activities-synopsis',item.synopsis||item.reason||'Synopsis unavailable'));
+      content.append(el('div','activities-line activities-synopsis',movieSynopsis(item)));
     }else if(item.kind==='events'){
       content.append(el('div','activities-line','📆 Today · '+item.time+' · '+item.venue),
         el('div','activities-line','📍 '+item.km+' km / '+item.driveMinutes+' min by car'),
@@ -406,7 +424,8 @@ window.ActivitiesPanel={
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
     meta.textContent=(last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
-      (state.kind==='movies'&&arr.length?' · '+arr.length+' verified movie'+(arr.length===1?'':'s')+(arr.length<9?' (fewer than 9 confirmed)':''):'')+
+      (state.kind==='movies'&&arr.length?' · '+arr.length+' filmes confirmados'+
+        (arr.some(x=>x.metadataVersion!==2)?' · Atualize para nota e sinopse em PT-BR':''):'')+
       (state.kind==='ideas'&&arr.length&&state.snapshot?.locale!=='pt-BR'?
         ' · Atualize para sugestões em português':'')+
       (state.error&&arr.length?' · '+state.error:'');
