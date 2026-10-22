@@ -1,7 +1,12 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="Family Dashboard">
+<link rel="manifest" href="/family-dashboard/manifest.webmanifest">
+<link rel="icon" sizes="192x192" type="image/png" href="/family-dashboard/icons/family-192.png">
+<link rel="apple-touch-icon" href="/family-dashboard/icons/family-192.png">
 <meta name="theme-color" content="#0a1426">
 <title>Family Smart Dashboard</title>
 <link rel="stylesheet" href="/family-dashboard/finance.css?v=notion-auto-2">
@@ -19,6 +24,38 @@
  .controls button{padding:6px 7px;font-size:11px;white-space:nowrap}
  #stage{min-height:0}
 }
+/* Installed tablet PWA: respect Android safe areas; never scroll the main viewport. */
+html{height:100%;height:100dvh;overflow:hidden}
+body{width:100%;height:100vh;height:100dvh;min-height:0;overflow:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.top{flex:none;min-width:0}
+#stage{display:flex;flex-direction:column;min-height:0;height:auto;overflow:hidden}
+#frame{display:block;flex:1 1 auto;width:100%;height:100%;min-height:0}
+#stage>.activities-mount,#stage>.meals-mount,#stage>.waste-mount{flex:1 1 auto;min-height:0;width:100%}
+#stage>.activities-mount{height:100%;overflow:hidden}
+#stage>.view{flex:1 1 auto;min-height:0;overflow:hidden;width:100%}
+.calendar-screen{height:100%;display:flex;flex-direction:column;padding:clamp(10px,1.7vh,20px) clamp(12px,2.4vw,30px)}
+.calendar-screen>.small,.calendar-screen>.big,.calendar-screen>.foot{flex:none}
+.calendar-screen .big{font-size:clamp(24px,3vw,38px);line-height:1.12;margin:3px 0}
+.calendar-screen .next-up{position:relative;top:auto;flex:none;min-height:0;margin:7px 0;padding:clamp(9px,1.3vh,14px) clamp(12px,1.9vw,20px);border-radius:15px}
+.calendar-screen .next-label{font-size:12px}
+.calendar-screen .next-title{font-size:clamp(20px,2.6vw,31px);line-height:1.12;margin:5px 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.calendar-screen .next-meta{font-size:clamp(12px,1.35vw,16px);line-height:1.2}
+.calendar-screen .next-countdown{font-size:14px;margin-top:3px}
+.calendar-screen .calendar-info{flex:none;font-size:clamp(12px,1.3vw,15px);margin:4px 0 8px}
+.calendar-screen .calendar-connection{flex:none;margin:4px 0;padding:5px 8px;font-size:12px}
+.calendar-screen .agenda{flex:1 1 auto;min-height:0;max-width:none;overflow:hidden}
+.calendar-screen .agenda-row{margin:4px 0;gap:10px;grid-template-columns:minmax(105px,155px) 1fr}
+.calendar-screen .agenda-time{padding:8px 3px;font-size:14px}
+.calendar-screen .agenda-event{padding:8px 12px;border-radius:10px}
+.calendar-screen .agenda-event h2{font-size:clamp(15px,1.5vw,20px);margin:0 0 3px;line-height:1.15}
+.calendar-screen .agenda-meta{font-size:12px;line-height:1.15}
+.calendar-screen .agenda-all-day{margin:6px 0 2px;font-size:12px}
+.calendar-screen .foot{margin:5px 0 0;font-size:11px}
+.calendar-page-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:35px;color:#c1d5e6;font-size:12px;font-weight:700}
+.calendar-page-controls button{border:1px solid #547b8b;background:#1b3b54;color:#d5f2f0;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:750}
+.calendar-page-controls button:disabled{opacity:.35}
+@media(max-width:600px){.calendar-screen .agenda-row{grid-template-columns:1fr;gap:1px;margin:2px 0}.calendar-screen .agenda-time{text-align:left;padding:2px 4px;font-size:12px}.calendar-screen .agenda-event{padding:6px 10px}}
+@media(max-height:600px){.calendar-screen>.small,.calendar-screen .foot{display:none}.calendar-screen .next-up{padding:7px 11px;margin:4px 0}.calendar-screen .next-title{font-size:20px}.calendar-screen .calendar-info{margin:3px 0}}
 </style></head>
 <body>
 <header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button><button data-mode="activities">✨ What to Do</button><button data-mode="waste">♻️ Coleta</button><button data-mode="meals">🍲 Meals</button><button data-mode="finance">🔒 Finance</button></nav></header>
@@ -31,7 +68,7 @@
 'use strict';
 const TZ='America/Toronto';const BASE='../kids-weather-panel/?v=5';
 let activitiesSavedView=null;
-let manual='auto',visible='',manualUntil=0,calendarEvents=[],calendarUpcoming=[],calendarLoaded=false;
+let manual='auto',visible='',manualUntil=0,calendarEvents=[],calendarUpcoming=[],calendarLoaded=false,calendarPage=0;
 const MANUAL_DURATION=30*60*1000;
 function parts(){const s=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',weekday:'short',month:'short',day:'numeric'}).formatToParts(new Date());return Object.fromEntries(s.filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
 // Collection eve 20:00–00:00; collection morning 08:45–10:00.
@@ -57,7 +94,7 @@ if(mode==='waste'){const view=document.createElement('section');view.className='
 if(mode==='meals'){const view=document.createElement('section');view.className='meals-mount';el.appendChild(view);if(window.MealsPanel)MealsPanel.mount(view);else view.textContent='Refeições temporariamente indisponíveis.';return;}
 if(mode==='weather'){const f=document.createElement('iframe');f.id='frame';f.src=BASE+'&refresh='+Date.now();f.title='Children clothing recommendations for Ottawa';el.appendChild(f);return;}
 const view=document.createElement('section');view.className='view';el.appendChild(view);
-if(mode==='calendar'){view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Family calendar</h1><div class="next-up" aria-label="Next appointment"><div class="next-label">⏭ NEXT UP</div><div class="next-title" id="next-title">Finding your next appointment…</div><div class="next-meta" id="next-meta"></div><div class="next-countdown" id="next-countdown"></div></div><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div class="calendar-connection" id="calendar-connection" role="status" hidden></div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars · Updates every 10 minutes</p>';calendarRenderedMinute=-1;calendarNextAttemptAt=0;if(calendarLoaded && calendarDataDate===ottawaDate()){const info=view.querySelector('#calendar-info');if(info)info.textContent='Last successful update '+calendarClock(calendarLastSync)+' · reconnecting';updateNextUp();drawCalendarList(view);}loadCalendar(view);}
+if(mode==='calendar'){view.classList.add('calendar-screen');calendarPage=0;view.innerHTML='<div class="small">FAMILY SCHEDULE · 06:00–22:00 (EXCEPT 08:00–08:50)</div><h1 class="big">📅 Family calendar</h1><div class="next-up" aria-label="Next appointment"><div class="next-label">⏭ NEXT UP</div><div class="next-title" id="next-title">Finding your next appointment…</div><div class="next-meta" id="next-meta"></div><div class="next-countdown" id="next-countdown"></div></div><div class="calendar-info dim" id="calendar-info">Connecting to your calendars…</div><div class="calendar-connection" id="calendar-connection" role="status" hidden></div><div id="calendar-events" class="agenda" aria-live="polite"></div><p class="foot">Read-only agenda · Ottawa time · All readable calendars · Updates every 10 minutes</p>';calendarRenderedMinute=-1;calendarNextAttemptAt=0;if(calendarLoaded && calendarDataDate===ottawaDate()){const info=view.querySelector('#calendar-info');if(info)info.textContent='Last successful update '+calendarClock(calendarLastSync)+' · reconnecting';updateNextUp();drawCalendarList(view);}loadCalendar(view);}
 else view.innerHTML='<div class="small">NIGHT MODE · 22:00–06:00</div><div class="clock" id="large-clock">--:--</div><h1>🌙 Good night!</h1><p class="dim">Your family schedule returns automatically at 6:00 AM.</p>';
 }
 
@@ -109,8 +146,24 @@ function drawCalendarList(view,now=Date.now()){
   empty.textContent='No more appointments today. The next upcoming appointment is shown above.';
   target.appendChild(empty);return;
  }
+ const available=target.clientHeight||360;
+ const pageSize=Math.max(1,Math.floor((available-82)/80));
+ const totalPages=Math.max(1,Math.ceil(events.length/pageSize));
+ calendarPage=Math.max(0,Math.min(calendarPage,totalPages-1));
+ if(totalPages>1){
+   const bar=document.createElement('div');bar.className='calendar-page-controls';
+   const previous=document.createElement('button');previous.type='button';previous.textContent='← Anterior';
+   previous.disabled=calendarPage===0;
+   previous.addEventListener('click',()=>{calendarPage--;calendarRenderedMinute=-1;drawCalendarList(view);});
+   const counter=document.createElement('span');
+   counter.textContent='Compromissos '+(calendarPage*pageSize+1)+'–'+Math.min(events.length,(calendarPage+1)*pageSize)+' de '+events.length;
+   const next=document.createElement('button');next.type='button';next.textContent='Próxima →';
+   next.disabled=calendarPage===totalPages-1;
+   next.addEventListener('click',()=>{calendarPage++;calendarRenderedMinute=-1;drawCalendarList(view);});
+   bar.append(previous,counter,next);target.appendChild(bar);
+ }
  let placedAllDay=false,placedTimed=false;
- for(const event of events){
+ for(const event of events.slice(calendarPage*pageSize,(calendarPage+1)*pageSize)){
   if(event.allDay&&!placedAllDay){placedAllDay=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='ALL DAY';target.appendChild(h);}
   if(!event.allDay&&!placedTimed){placedTimed=true;const h=document.createElement('div');h.className='agenda-all-day';h.textContent='APPOINTMENTS';target.appendChild(h);}
   const row=document.createElement('article');row.className='agenda-row';
@@ -239,6 +292,12 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){calendarN
 window.addEventListener('online',()=>{calendarNextAttemptAt=0;window.WastePanel?.refresh(true);window.MealsPanel?.refresh(true);render();});
 window.addEventListener('waste-calendar-updated',()=>{if(manual==='auto')render();});
 window.addEventListener('pageshow',event=>{if(event.persisted){calendarNextAttemptAt=0;render();}});
+window.addEventListener('resize',()=>{
+ if(visible==='calendar'){calendarRenderedMinute=-1;drawCalendarList(document.querySelector('#stage .calendar-screen'));}
+});
+if('serviceWorker' in navigator){
+ window.addEventListener('load',()=>navigator.serviceWorker.register('/family-dashboard/sw.js',{scope:'/family-dashboard/'}).catch(()=>{}));
+}
 setInterval(render,15000);render();
 </script>
 </body></html>
