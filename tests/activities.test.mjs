@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {onRequestPost,originPoint,scheduleFor} from '../functions/api/activities/generate.js';
+import {onRequestPost,originPoint,scheduleFor,isNight,eligibleNightCategory} from '../functions/api/activities/generate.js';
 import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
@@ -80,7 +80,7 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     }
     if(uri.includes('/media?maxWidthPx=720'))return response({photoUri:'https://lh3.googleusercontent.com/demo'});
     if(uri.startsWith('https://places.googleapis.com/v1/places/place_')) {
-      if(options.headers?.['X-Goog-FieldMask']==='photos,attributions') {
+      if(options.headers?.['X-Goog-FieldMask']==='photos') {
         return response({photos:[{name:'places/place_0_0/photos/demo',googleMapsUri:'https://maps.google.com/photo-source',
           authorAttributions:[{displayName:'Photographer',uri:'https://example.org/credit'}]}]});
       }
@@ -171,9 +171,9 @@ test('all-day event ignored but timed appointment is a busy range',()=>{
 });
 
 test('new mode inputs constrain party, environment and spending preference',()=>{
-  assert.deepEqual(normalizeOptions({mode:'couple'}),{mode:'couple',adults:2,kids:0,environment:'all',budget:'any'});
+  assert.deepEqual(normalizeOptions({mode:'couple'}),{mode:'couple',adults:2,kids:0,environment:'all',budget:'any',maxKm:20});
   assert.deepEqual(normalizeOptions({mode:'visits',adults:14,kids:-7,environment:'outdoor',budget:'free'}),
-    {mode:'visits',adults:8,kids:0,environment:'outdoor',budget:'free'});
+    {mode:'visits',adults:8,kids:0,environment:'outdoor',budget:'free',maxKm:20});
   assert.equal(learnedCounts([{mode:'family',category:'park',value:'like'}, {mode:'couple',category:'park',value:'dislike'}],'family').park.liked,1);
 });
 test('event/movie web research rejects uncited data and unsafe sources',async()=>{
@@ -221,4 +221,31 @@ test('couple evenings remain possible after 8 PM, while family hours end earlier
   assert.equal(scheduleFor(place,10,'2026-10-21',1215,[],hours,1200),null);
   const couple=scheduleFor(place,10,'2026-10-21',1215,[],hours,1410);
   assert.ok(couple&&couple.t>=1215,'a couple may still go out after 8 PM');
+});
+
+test('radius choices are constrained and request options are normalized',()=>{
+  for(const maxKm of [5,10,20,30,50])assert.equal(normalizeOptions({maxKm}).maxKm,maxKm);
+  for(const invalid of [0,25,200,-10,'fake'])assert.equal(normalizeOptions({maxKm:invalid}).maxKm,20);
+});
+test('nighttime suggestions exclude parks and require confirmed open hours',()=>{
+  assert.equal(isNight(22*60),true);
+  assert.equal(isNight(19*60+59),false);
+  assert.equal(isNight(2*60),true);
+  assert.equal(eligibleNightCategory('park'),false);
+  assert.equal(eligibleNightCategory('food'),true);
+  const date='2026-10-21';
+  const forecast=[{time:date+'T22:00',temp:9,rain:0,wind:0}];
+  const closed={category:'food',currentOpeningHours:{periods:[{
+    open:{date:{year:2026,month:10,day:21},hour:10,minute:0},
+    close:{date:{year:2026,month:10,day:21},hour:21,minute:0}
+  }]}};
+  const opened={category:'food',currentOpeningHours:{periods:[{
+    open:{date:{year:2026,month:10,day:21},hour:17,minute:0},
+    close:{date:{year:2026,month:10,day:22},hour:0,minute:0}
+  }]}};
+  assert.equal(scheduleFor(closed,8,date,22*60,[],forecast,1440,true),null);
+  assert.ok(scheduleFor(opened,8,date,22*60,[],forecast,1440,true));
+  assert.equal(scheduleFor({category:'park',currentOpeningHours:opened.currentOpeningHours},8,date,22*60,[],forecast,1440,true),null);
+  assert.equal(scheduleFor({category:'indoor'},8,date,22*60,[],forecast,1440,true),null,
+    'Unknown opening hours must not count as definitely open');
 });
