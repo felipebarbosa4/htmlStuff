@@ -132,7 +132,8 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     const ph=await p.json();
     assert.equal(ph.credits[0].name,'Photographer');
     assert.equal(ph.sourceUrl,'https://maps.google.com/photo-source');
-    const repeated=await onRequestPost(ctx);
+    const repeated=await onRequestPost({...ctx,request:new Request('https://dashboard.example.org/api/activities/generate',{
+      method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},body:'{}'})});
     assert.equal(repeated.status,429);
     const denied=await onRequestPost({...ctx,request:new Request('https://dashboard.example.org/api/activities/generate',{method:'POST',headers:{origin:'https://evil.example','content-type':'application/json'},body:'{}'})});
     assert.equal(denied.status,403);
@@ -181,7 +182,7 @@ test('event/movie web research rejects uncited data and unsafe sources',async()=
   const date=originalDate.parse('2026-10-21T15:00:00Z');
   global.Date=class extends originalDate{constructor(...x){super(...(x.length?x:[date]));}static now(){return date;}};
   const env={OPENAI_API_KEY:'fake',HOME_ADDRESS:'TEST ADDRESS',GOOGLE_MAPS_API_KEY:'fake',
-    ACTIVITIES_KV:{get:async k=>memory.get(k)||null,put:async(k,v)=>memory.set(k,v)}};
+    ACTIVITIES_KV:{get:async(k,format)=>format==='json'&&memory.get(k)?JSON.parse(memory.get(k)):memory.get(k)||null,put:async(k,v)=>memory.set(k,v)}};
   const response=obj=>new Response(JSON.stringify(obj),{headers:{'content-type':'application/json'}});
   try{
     global.fetch=async(url,options={})=>{
