@@ -123,7 +123,8 @@ async function selectWithAI(env,date,forecastSummary,earliest,blocked,options,co
   // Google Places, Routes and exact home coordinates never enter the LLM input.
   const categories=CATEGORY_SETS[options.mode].map(x=>x[0])
     .filter(cat=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
-    .filter(cat=>options.budget!=='free'||FREE_CANDIDATES.has(cat));
+    .filter(cat=>options.budget!=='free'||FREE_CANDIDATES.has(cat))
+    .filter(cat=>!options.nightMode||eligibleNightCategory(cat));
   const scenario=options.mode==='couple'?'romantic couple date, adult conversation and fun':
     options.mode==='visits'?'show first-time visitors the memorable character of Ottawa, kid-friendly where needed':
     'playful and educational family outing';
@@ -186,6 +187,10 @@ export async function onRequestPost(context) {
       if(data.partial)throw Error('One or more calendars could not be checked');
       return ranges(data.events,date);
     };
+    if(night && options.environment==='outdoor')
+      return json({error:'After 8 PM, outdoor-only suggestions are disabled for safety. Select Indoor or Both.'},422);
+    if(night && options.budget==='free')
+      return json({error:'No verified free nighttime venues in this category set. Select another budget.'},422);
     const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
     const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home,options,night)]);
     const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
