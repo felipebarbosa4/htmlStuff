@@ -199,20 +199,17 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
           {id:2,title:'Adult Film',poster_path:'/adult.jpg'},
           {id:3,title:'Unrated Film',poster_path:null}]});
       }
-      if(u.includes('/videos?')){
-        return response({results:[{site:'YouTube',type:'Trailer',official:true,key:'dQw4w9WgXcQ'}]});
-      }
-      if(u.includes('/watch/providers')){
-        return response({results:{CA:{link:'https://www.themoviedb.org/movie/1/watch?locale=CA',
-          flatrate:[{provider_id:8,provider_name:'Netflix',display_priority:1}],
-          rent:[{provider_id:10,provider_name:'Apple TV Store',display_priority:2}],
-          buy:[]}}});
-      }
-      if(u.includes('/movie/')&&u.endsWith('/release_dates')){
-        const id=Number(u.split('/')[5]);
+      if(u.includes('/movie/')&&u.includes('append_to_response=')){
+        const id=Number(new URL(u).pathname.split('/')[3]);
         const cert=id===1?'PG':id===2?'14A':'';
-        return response({results:[{iso_3166_1:'CA',
-          release_dates:[{type:3,release_date:'2026-10-09T00:00:00Z',certification:cert}]}]});
+        assert.equal(new URL(u).searchParams.get('append_to_response'),'release_dates,videos,watch/providers');
+        return response({overview:'An adventure from the TMDB synopsis.',
+          release_dates:{results:[{iso_3166_1:'CA',
+            release_dates:[{type:3,release_date:'2026-10-09T00:00:00Z',certification:cert}]}]},
+          videos:{results:[{site:'YouTube',type:'Trailer',official:true,key:'dQw4w9WgXcQ'}]},
+          'watch/providers':{results:{CA:{link:'https://www.themoviedb.org/movie/1/watch?locale=CA',
+            flatrate:[{provider_id:8,provider_name:'Netflix',display_priority:1}],
+            rent:[{provider_id:10,provider_name:'Apple TV Store',display_priority:2}],buy:[]}}}});
       }
       throw Error('Unexpected '+u);
     };
@@ -224,6 +221,8 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
     const result=await r.json();
     assert.deepEqual(result.items.map(x=>x.name),['Family Film']);
     assert.equal(result.items[0].rating,'PG');
+    assert.equal(calls.filter(x=>x.includes('/movie/1?append_to_response')).length,1);
+    assert.ok(result.items[0].synopsis.includes('TMDB synopsis'));
     assert.equal(result.items[0].posterUrl,'https://image.tmdb.org/t/p/w342/poster.jpg');
     assert.equal(result.items[0].trailerUrl,'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
     assert.deepEqual(result.items[0].watch.subscription,['Netflix']);

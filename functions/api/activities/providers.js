@@ -23,16 +23,12 @@ const videoLink=data=>{
     Number(b.iso_639_1==='en')-Number(a.iso_639_1==='en'));
   return valid.length?'https://www.youtube.com/watch?v='+valid[0].key:'';
 };
-async function movieExtras(id,key){
-  const [videos,providers]=await Promise.allSettled([
-    getJSON(TMDB+'/movie/'+id+'/videos?language=en-US',{headers:auth(key)}),
-    getJSON(TMDB+'/movie/'+id+'/watch/providers',{headers:auth(key)})
-  ]);
-  const ca=providers.status==='fulfilled'?providers.value.results?.CA:null;
+function movieExtras(details){
+  const ca=details?.['watch/providers']?.results?.CA;
   return {
-    trailerUrl:videos.status==='fulfilled'?videoLink(videos.value):'',
+    trailerUrl:videoLink(details?.videos),
     watch:{
-      verified:providers.status==='fulfilled',
+      verified:Boolean(details?.['watch/providers']?.results),
       subscription:providerList(ca?.flatrate),
       free:providerList([...(ca?.free||[]),...(ca?.ads||[])]),
       rent:providerList(ca?.rent),
@@ -42,7 +38,6 @@ async function movieExtras(id,key){
   };
 }
 
-
 export async function tmdbMovies(env,opts,now){
   const key=String(env.TMDB_API_KEY||'').trim();
   if(!key)throw Error('TMDB_API_KEY missing. Add a TMDB API Read Access Token to Cloudflare secrets.');
@@ -51,13 +46,19 @@ export async function tmdbMovies(env,opts,now){
     'release_date.lte':monthEnd(month),with_release_type:'3|2',
     sort_by:'popularity.desc',include_adult:'false',page:'1'})
     .forEach(([k,v])=>u.searchParams.set(k,v));
-  const data=await getJSON(u.toString(),{headers:auth(key)});
+  let data;
+  try{data=await getJSON(u.toString(),{headers:auth(key)});}
+  catch(e){
+    if(/Service HTTP (?:401|403)/.test(String(e.message||'')))
+      throw Error('TMDB rejected the credential. Use the API Read Access Token (Bearer), not the API Key v3, in Cloudflare Production.');
+    throw e;
+  }
   const movies=(data.results||[]).filter(m=>Number.isInteger(m.id)&&m.id>0&&!m.adult)
     .slice(0,family(opts)?20:16);
   const results=await Promise.all(movies.map(async m=>{
     try{
-      const details=await getJSON(TMDB+'/movie/'+m.id+'/release_dates',{headers:auth(key)});
-      const release=details.results?.find(x=>x.iso_3166_1==='CA');
+      const details=await getJSON(TMDB+'/movie/'+m.id+'?append_to_response=release_dates,videos,watch%2Fproviders&language=en-US',{headers:auth(key)});
+      const release=details.release_dates?.results?.find(x=>x.iso_3166_1==='CA');
       const theatrical=(release?.release_dates||[]).filter(x=>
         [2,3].includes(x.type) && /^\d{4}-\d{2}-\d{2}/.test(x.release_date||'') &&
         x.release_date.slice(0,7)===month);
@@ -66,24 +67,18 @@ export async function tmdbMovies(env,opts,now){
         a.release_date.localeCompare(b.release_date));
       const certs=[...new Set(theatrical.map(x=>String(x.certification||'').trim().toUpperCase()).filter(Boolean))];
       if(family(opts) && (!certs.length||!certs.every(x=>['G','PG'].includes(x))))return null;
-      const poster=photoPath(m.poster_path);
+      const poster=photoPath(m.poster_path||details.poster_path);
+      const synopsis=String(details.overview||m.overview||'Synopsis unavailable').slice(0,650);
       return {id:'tmdb:'+m.id,kind:'movies',name:String(m.title||m.original_title||'').slice(0,105),
         releaseDate:theatrical[0].release_date.slice(0,10),
         rating:certs[0]||'Unverified',
-        reason:String(m.overview||'Canadian theatrical release').slice(0,550),
+        reason:synopsis.slice(0,110),synopsis,...movieExtras(details),
         sourceUrl:'https://www.themoviedb.org/movie/'+m.id,
         posterUrl:poster?'https://image.tmdb.org/t/p/w342'+poster:'',
         provider:'TMDB'};
     }catch{return null;}
   }));
-  const selected=results.filter(Boolean).sort((a,b)=>a.releaseDate.localeCompare(b.releaseDate)).slice(0,12);
-  // Enrich ONLY retained movies to avoid an unnecessary 2x fanout for discarded titles.
-  return Promise.all(selected.map(async movie=>{
-    try{
-      const extras=await movieExtras(Number(movie.id.slice(5)),key);
-      return {...movie, ...extras, synopsis:movie.reason, reason:movie.reason.slice(0,115)};
-    }catch{return {...movie,trailerUrl:'',watch:{verified:false,subscription:[],free:[],rent:[],buy:[],link:''},synopsis:movie.reason};}
-  }));
+  return results.filter(Boolean).sort((a,b)=>a.releaseDate.localeCompare(b.releaseDate)).slice(0,12);
 }
 
 async function eventsFor(date){
