@@ -1,15 +1,8 @@
 import {ZONE,CACHE_KEY,MAX_KM,json,local,addDay,ranges,openDuring,outdoorWeather,hourText,getJSON} from './shared.js';
 import {onRequestGet as calendarGet} from '../calendar.js';
+import {CATEGORY_SETS,OUTDOOR,FREE_CANDIDATES,FEEDBACK_KEY,normalizeOptions,keyFor,preferencesFrom,learnedCounts,validOrigin} from './config.js';
 
 // Explicit user action only: no scheduled generation, no AI on page load.
-const queries=[
-  ['park','parks playgrounds walking trails family Ottawa Ontario'],
-  ['indoor','indoor playground trampoline bowling kids Ottawa Ontario'],
-  ['museum','museums science family kids Ottawa Ontario'],
-  ['recreation','indoor swimming pools recreation centres Ottawa Ontario'],
-  ['library','public libraries children Ottawa Ontario'],
-  ['animals','family animal farm nature centre Ottawa Ontario']
-];
 const fieldMask=['places.id','places.displayName','places.formattedAddress','places.location','places.googleMapsUri',
   'places.businessStatus','places.currentOpeningHours','places.rating','places.userRatingCount',
   'places.primaryType','places.websiteUri','places.attributions'].join(',');
@@ -57,7 +50,10 @@ export async function forecast(origin) {
   if(!Array.isArray(h?.time))throw Error('Weather forecast missing');
   return h.time.map((time,i)=>({time,temp:h.temperature_2m[i],rain:h.precipitation_probability[i],wind:h.wind_speed_10m[i]}));
 }
-async function findPlaces(key,origin) {
+async function findPlaces(key,origin,options) {
+  const all=CATEGORY_SETS[options.mode];
+  const queries=all.filter(([cat])=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
+    .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat));
   const results=await Promise.allSettled(queries.map(async ([category,query])=>{
     const r=await getJSON('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
@@ -71,7 +67,7 @@ async function findPlaces(key,origin) {
   const dedup=new Map();
   for(const result of results)if(result.status==='fulfilled')for(const p of result.value)
     if(!dedup.has(p.id))dedup.set(p.id,p);
-  if(dedup.size<4)throw Error('Not enough verified places from Google Places');
+  if(!dedup.size)throw Error('No matching verified places from Google Places');
   return [...dedup.values()].slice(0,45);
 }
 export async function routes(key,origin,places) {
@@ -103,7 +99,7 @@ export function scheduleFor(place,drive,date,earliest,busy,hours) {
     if(busy.some(([a,b])=>a<home&&b>t))continue;
     const open=openDuring(place.currentOpeningHours,date,arrival,done);
     if(open===false)continue;
-    const outdoor=['park','animals'].includes(place.category);
+    const outdoor=OUTDOOR.has(place.category);
     const w=outdoorWeather(hours,date,arrival);
     // Bad weather discourages outdoor activities but does not silently replace them.
     const penalty=(outdoor?w.penalty:0)+(open===null?3:0)+(t-earliest)/140;
@@ -118,42 +114,51 @@ function parseChoice(data) {
   if(!obj||!Array.isArray(obj.categories))throw Error('AI returned invalid activity types');
   return obj;
 }
-async function selectWithAI(env,date,forecastSummary,earliest,blocked) {
-  // Do not send Google Places or Routes content to an LLM. It only plans
-  // activity TYPES and packing advice from first-party family/schedule data.
-  const categories=queries.map(x=>x[0]);
-  const instruction='Plan family activity TYPES for two adults and children aged 8 and 5 in Ottawa, Canada. '+
-    'Prioritize a varied day with both indoor and outdoor ideas as weather permits. '+
-    'Choose six category names, ordered from best to least fitting, only from '+JSON.stringify(categories)+'. '+
-    'Do not invent any particular venue, price, opening hours, address, distance or rating. '+
-    'Return JSON ONLY: {"categories":["park","museum",...],"notes":{"park":{"bring":"short packing list","why":"brief fun activity description"},...}}. '+
-    'Each category note should be practical, age appropriate, and not name any specific business.';
-  const input=instruction+'\nDate: '+date+'; first available departure minute after midnight: '+earliest+
-    '; busy time ranges (minutes): '+JSON.stringify(blocked)+'\nWeather: '+forecastSummary;
-  if(!env.OPENAI_API_KEY)throw Error('Add OPENAI_API_KEY as a Cloudflare secret');
+async function selectWithAI(env,date,forecastSummary,earliest,blocked,options,counts) {
+  // The AI sees only first-party family preferences, time availability, and weather.
+  // Google Places, Routes and exact home coordinates never enter the LLM input.
+  const categories=CATEGORY_SETS[options.mode].map(x=>x[0])
+    .filter(cat=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
+    .filter(cat=>options.budget!=='free'||FREE_CANDIDATES.has(cat));
+  const scenario=options.mode==='couple'?'romantic couple date, adult conversation and fun':
+    options.mode==='visits'?'show first-time visitors the memorable character of Ottawa, kid-friendly where needed':
+    'playful and educational family outing';
+  const instruction='You are an expert local outing planner for Ottawa, Ontario, Canada. '+
+    'Choose an ORDERED list of up to six suitable categories ONLY from '+JSON.stringify(categories)+'. '+
+    'Situation: '+scenario+'. Group: '+options.adults+' adults, '+options.kids+' children'+
+    (options.kids? ' (including ages 8 and 5 when the children are Luna and Apollo).':' (adult-only outing).')+
+    ' Prioritize the CURRENT TIME, weather, available free slots and age appropriateness. '+
+    'Budget preference: '+options.budget+' (free / under CAD 100 / no limit). Never promise an unverified price. '+
+    'Environment: '+options.environment+'. Learned category feedback counts are supplied; prefer likes and avoid dislikes. '+
+    'Never create names of venues, movie screenings, events, addresses, distances, ratings or opening hours. '+
+    'Return valid JSON ONLY: {"categories":["park","museum"],"notes":{"park":{"bring":"short practical packing list","why":"short age-relevant reason"}}}. '+
+    'Provide a distinct, brief practical packing list and reason for every selected category.';
+  const input=instruction+'\nToday: '+date+' in America/Toronto; earliest departure '+earliest+
+    ' minutes after midnight; blocked intervals '+JSON.stringify(blocked)+
+    '\nForecast after the earliest departure: '+forecastSummary+
+    '\nCategory preferences (non-identifying counts): '+JSON.stringify(counts);
   const data=await getJSON('https://api.openai.com/v1/responses',{
-    method:'POST',
-    headers:{authorization:'Bearer '+env.OPENAI_API_KEY,'content-type':'application/json'},
-    body:JSON.stringify({
-      model:'gpt-6-luna',
-      reasoning:{effort:'none'},
-      input,store:false,max_output_tokens:1800
-    })
+    method:'POST',headers:{authorization:'Bearer '+env.OPENAI_API_KEY,'content-type':'application/json'},
+    body:JSON.stringify({model:'gpt-6-luna',reasoning:{effort:'none'},input,store:false,max_output_tokens:1600})
   });
   const parsed=parseChoice(data);
   const ordered=[...new Set(parsed.categories.filter(x=>categories.includes(x)))];
-  if(ordered.length<3)throw Error('OpenAI did not return enough distinct activity types');
+  if(!ordered.length)throw Error('OpenAI did not return valid activity types');
   return {categories:ordered,notes:parsed.notes||{},provider:'GPT-6 Luna'};
 }
 export async function onRequestPost(context) {
   const {request,env}=context;
-  if(!authOrigin(request))return json({error:'Use the What to Do button on the protected dashboard.'},403);
+  if(!validOrigin(request))return json({error:'Use the What to Do button on the protected dashboard.'},403);
   if(!request.headers.get('content-type')?.startsWith('application/json'))return json({error:'JSON required'},415);
   if(!env.ACTIVITIES_KV||!env.GOOGLE_MAPS_API_KEY||!env.HOME_ADDRESS)
     return json({error:'Activities setup incomplete: KV, Google Maps key, or private home address is missing.'},503);
   if(!env.OPENAI_API_KEY)
     return json({error:'Add OPENAI_API_KEY to Cloudflare secrets.'},503);
   try{
+    const input=await request.json();
+    const options=normalizeOptions(input);
+    const history=preferencesFrom(await env.ACTIVITIES_KV.get(FEEDBACK_KEY,'json'));
+    const counts=learnedCounts(history,options.mode);
     const last=Number(await env.ACTIVITIES_KV.get(CACHE_KEY+':last-request')||0);
     if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
     await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(Date.now()),{expirationTtl:120});
@@ -161,7 +166,7 @@ export async function onRequestPost(context) {
     let targetDate=now.minute>=1200?addDay(now.date):now.date;
     const earliestFor=date=>{
       const day=local(new Date(date+'T12:00:00Z')).weekday;
-      const minimum=['Sat','Sun'].includes(day)?540:930;
+      const minimum=options.kids>0&&!['Sat','Sun'].includes(day)?930:540;
       return date===now.date?Math.max(now.minute+15,minimum):minimum;
     };
     const agendaFor=async date=>{
@@ -173,7 +178,7 @@ export async function onRequestPost(context) {
       return ranges(data.events,date);
     };
     const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
-    const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home)]);
+    const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home,options)]);
     const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
     const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
       const route=distances.get(i);
@@ -190,18 +195,26 @@ export async function onRequestPost(context) {
         score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};
     }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,26);
     let pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
-    if(pool.length<4 && targetDate===now.date) {
+    if(pool.length<3 && targetDate===now.date) {
       // If it is too late for a realistic outing, use tomorrow's free hours
       // without charging again for Places/Routes searches.
       const tomorrow=addDay(targetDate),tomorrowBusy=await agendaFor(tomorrow);
       const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
       if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
     }
-    if(pool.length<4)throw Error('Fewer than four suitable places with verified driving distances and free time slots');
+    if(!pool.length)throw Error('No suitable places with verified driving distances and available slots');
     const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
-      .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[]);
+      .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[],options,counts);
+    // Feedback is authoritative: exclude places marked Not interested; de-prioritize
+    // visited ones. Likes receive priority without sharing place IDs with OpenAI.
+    const feedbackById=new Map(history.filter(x=>x.mode===options.mode).map(x=>[x.id,x.value]));
+    pool=pool.filter(p=>feedbackById.get(p.id)!=='dislike');
+    pool.sort((a,b)=>{
+      const bonus=x=>feedbackById.get(x.id)==='like'?5:feedbackById.get(x.id)==='visited'?-7:0;
+      return (b.score+bonus(b))-(a.score+bonus(a));
+    });
     const byId=new Map(pool.map(x=>[x.id,x]));
-    const preferences=[...new Set([...choice.categories,...queries.map(q=>q[0])])];
+    const preferences=[...new Set([...choice.categories,...CATEGORY_SETS[options.mode].map(q=>q[0])])];
     const ranked=preferences.flatMap(cat=>pool.filter(p=>p.category===cat).map(p=>p.id));
     const ids=[],categoryCount=new Map();
     // Enforce variety even when the model over-selects one category.
@@ -224,13 +237,13 @@ export async function onRequestPost(context) {
         price:'Check admission price'};
     }).filter(Boolean);
     const result={date:targetDate,generatedAt:new Date().toISOString(),provider:choice.provider,
-      items,coverage:items.length,timezone:ZONE};
+      items,coverage:items.length,timezone:ZONE,options};
     // Cache only place IDs, user-facing activity types and model-authored notes.
     // Never persist Google place names/addresses/ratings/hours/route data.
     const stored={date:targetDate,generatedAt:result.generatedAt,provider:choice.provider,
       items:items.map(({id,category,bring,reason})=>({id,category,bring,reason})),
-      timezone:ZONE};
-    await env.ACTIVITIES_KV.put(CACHE_KEY,JSON.stringify(stored),{expirationTtl:28*24*60*60});
+      timezone:ZONE,options};
+    await env.ACTIVITIES_KV.put(keyFor(options.mode),JSON.stringify(stored),{expirationTtl:28*24*60*60});
     return json(result);
   }catch(e){return json({error:String(e?.message||'Generation failed').slice(0,220)},502);}
 }
