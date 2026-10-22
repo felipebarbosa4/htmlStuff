@@ -11,6 +11,7 @@ export const CATEGORY_SETS={
     ['recreation','swimming pools community recreation centres Ottawa Ontario'],
     ['library','Ottawa public library branches children Ottawa Ontario'],
     ['animals','farm animals family nature centre Ottawa Ontario'],
+    ['food','family friendly dessert cafes and restaurants Ottawa Ontario'],
     ['cinema','movie theatres family films Ottawa Ontario']
   ],
   couple:[
