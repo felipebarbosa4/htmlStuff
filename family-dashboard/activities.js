@@ -54,7 +54,7 @@ window.ActivitiesPanel={
   function fit(){if(active())root.style.height=Math.max(310,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
   function pageSize(){return window.innerWidth<690?2:4;}
   function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode):
-    '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode);}
+    '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+'&maxKm='+state.maxKm;}
   function controls(){
     for(const b of root.querySelectorAll('[data-mode-choice]'))b.classList.toggle('selected',b.dataset.modeChoice===state.mode);
     for(const b of root.querySelectorAll('[data-env]'))b.classList.toggle('selected',b.dataset.env===state.environment);
@@ -66,7 +66,7 @@ window.ActivitiesPanel={
     refresh.textContent=state.busy?'⏳ Checking…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':'↻ Find Movies';
     refresh.disabled=state.busy;
     caption.textContent=state.kind==='ideas'?'📍 Selected '+state.maxKm+' km by road · Google Maps · Prices unverified':
-      state.kind==='events'?'🎟 Events today · Current verified radius 20 km · Official links':
+      state.kind==='events'?'🎟 Events today · Max '+state.maxKm+' km · Official links':
       '🎬 Canadian releases this month · Showtimes must be verified';
     q('#ideas-clock').textContent=fmt();
   }
@@ -284,7 +284,10 @@ window.ActivitiesPanel={
     state[type]=Math.max(type==='adults'?1:0,Math.min(type==='adults'?8:10,state[type]+step));persist();render();
   },{signal});
   q('#ideas-budget').addEventListener('change',e=>{state.budget=e.target.value;persist();render();},{signal});
-  q('#ideas-distance').addEventListener('change',e=>{state.maxKm=Number(e.target.value);persist();render();},{signal});
+  q('#ideas-distance').addEventListener('change',e=>{
+    state.maxKm=Number(e.target.value);persist();
+    if(state.kind==='events')load(); else render();
+  },{signal});
   refresh.addEventListener('click',generate,{signal});
   q('#ideas-prev').addEventListener('click',()=>{state.page--;render();},{signal});
   q('#ideas-next').addEventListener('click',()=>{state.page++;render();},{signal});
