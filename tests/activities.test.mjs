@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {onRequestPost,originPoint} from '../functions/api/activities/generate.js';
+import {onRequestPost,originPoint,scheduleFor} from '../functions/api/activities/generate.js';
 import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
@@ -210,4 +210,15 @@ test('event/movie web research rejects uncited data and unsafe sources',async()=
     const read=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
     assert.equal((await read.json()).items.length,1);
   }finally{global.fetch=oldFetch;global.Date=originalDate;}
+});
+
+test('couple evenings remain possible after 8 PM, while family hours end earlier',()=>{
+  const place={category:'food',currentOpeningHours:{periods:[{
+    open:{date:{year:2026,month:10,day:21},hour:0,minute:0},
+    close:{date:{year:2026,month:10,day:22},hour:0,minute:0}
+  }]}};
+  const hours=[{time:'2026-10-21T20:00',temp:12,rain:10,wind:5}];
+  assert.equal(scheduleFor(place,10,'2026-10-21',1215,[],hours,1200),null);
+  const couple=scheduleFor(place,10,'2026-10-21',1215,[],hours,1410);
+  assert.ok(couple&&couple.t>=1215,'a couple may still go out after 8 PM');
 });
