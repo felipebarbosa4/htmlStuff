@@ -174,3 +174,35 @@
 @media(max-width:739px){
   .activities-root.activities-movies .activities-grid{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Local, full-screen trailer dialog. No popup/new browser tab. */
+.activities-root .activities-trailer-link{
+  display:inline-flex;align-self:flex-start;align-items:center;background:transparent;
+  border:0;padding:1px 0;color:#7deedc;text-decoration:underline;
+  font:inherit;font-size:12px;font-weight:800;cursor:pointer
+}
+.activities-modal .activities-modal-play{background:#73eadb;color:#082b31;font-weight:800;cursor:pointer}
+.activities-trailer-backdrop{z-index:1100;padding:8px}
+.activities-trailer-modal{
+  box-sizing:border-box;width:min(960px,96vw);max-width:calc(100vw - 16px);
+  max-height:calc(100dvh - 16px);overflow:auto;display:flex;flex-direction:column;
+  gap:10px;padding:14px 16px
+}
+.activities-trailer-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+.activities-trailer-header h2{margin:0;font-size:clamp(15px,2.1vw,24px);line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.activities-trailer-close{flex-shrink:0;padding:7px 12px;font-size:14px;cursor:pointer}
+.activities-trailer-player{width:100%;min-height:200px;aspect-ratio:16/9;overflow:hidden;border-radius:12px;background:#000;flex-shrink:1}
+.activities-trailer-frame{display:block;width:100%;height:100%;border:0;min-height:200px}
+.activities-trailer-note{margin:0!important;font-size:12px!important;color:#b7cddd}
+.activities-modal .activities-trailer-fallback{
+  display:inline-flex;align-self:flex-start;padding:6px 10px;border-radius:8px;
+  background:#274862;color:#d9f7ff;font-size:12px;text-decoration:underline
+}
+@media(max-height:540px){
+ .activities-trailer-modal{gap:4px;padding:5px 10px}
+ .activities-trailer-header h2{font-size:15px}
+ .activities-trailer-close{padding:5px 9px}
+ .activities-trailer-player{width:min(100%,calc((100dvh - 115px) * 16 / 9));align-self:center;min-height:200px}
+ .activities-trailer-note{font-size:10px!important;line-height:1.1!important}
+ .activities-modal .activities-trailer-fallback{padding:3px 7px;font-size:11px}
+}

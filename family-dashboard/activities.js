@@ -3,6 +3,18 @@
 const TZ='America/Toronto';
 const ICON={park:'🌳',indoor:'🤸',museum:'🏛️',recreation:'🏊',library:'📚',animals:'🐾',food:'🍽️',culture:'🎭',cinema:'🎬',landmark:'🏛️'};
 const URLSAFE=url=>{try{const u=new URL(url);return u.protocol==='https:'?u.href:'';}catch{return '';}};
+// Only a real YouTube trailer ID returned by TMDB may be embedded.
+// No arbitrary URL or HTML is accepted inside an iframe.
+const trailerId=url=>{
+  try{
+    const u=new URL(url);
+    if(u.protocol!=='https:')return '';
+    const host=u.hostname.toLowerCase();
+    const id=(['www.youtube.com','youtube.com','m.youtube.com'].includes(host)&&u.pathname==='/watch')?
+      u.searchParams.get('v'):(host==='youtu.be'&&/^\/[A-Za-z0-9_-]{11}$/.test(u.pathname)?u.pathname.slice(1):'');
+    return /^[A-Za-z0-9_-]{11}$/.test(id||'')?id:'';
+  }catch{return '';}
+};
 const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const dayLabel=s=> /^\d{4}-\d{2}-\d{2}$/.test(s||'')?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',month:'short',day:'numeric'}).format(new Date(s+'T12:00:00Z')):'Selected day';
 const watchNames=x=>(Array.isArray(x)?x:[]).join(', ');
@@ -148,7 +160,48 @@ window.ActivitiesPanel={
         else if(holder.isConnected)holder.append(el('span','activities-photo-unavailable','Photo not available'));
       }).catch(()=>{if(holder.isConnected)holder.append(el('span','activities-photo-unavailable','Photo unavailable'));});
   }
-  function closeModal(){state.modal?.remove();state.modal=null;}
+  function closeModal(){
+    if(!state.modal)return;
+    const before=state.modal._focusBefore;
+    // Removing the entire iframe stops video/sound when the dialog closes.
+    state.modal.remove();state.modal=null;
+    if(before?.isConnected)before.focus({preventScroll:true});
+  }
+  function openTrailer(item){
+    const id=trailerId(item?.trailerUrl);
+    if(!id)return;
+    const focused=document.activeElement;
+    closeModal();
+    const overlay=el('div','activities-modal-backdrop activities-trailer-backdrop');
+    const panel=el('div','activities-modal activities-trailer-modal');
+    panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+    panel.setAttribute('aria-label','Trailer: '+item.name);
+    const header=el('div','activities-trailer-header');
+    const title=el('h2','', '▶ '+item.name+' — Trailer');
+    const close=el('button','activities-close activities-trailer-close','✕ Close');close.type='button';
+    close.addEventListener('click',closeModal,{signal});
+    header.append(title,close);
+    const area=el('div','activities-trailer-player');
+    const frame=el('iframe','activities-trailer-frame');
+    frame.title='YouTube trailer for '+item.name;
+    frame.src='https://www.youtube-nocookie.com/embed/'+id+'?playsinline=1&rel=0';
+    frame.referrerPolicy='origin';
+    frame.allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';
+    frame.allowFullscreen=true;frame.loading='eager';
+    area.append(frame);
+    const text=el('p','activities-trailer-note',
+      'Tap Play inside the video. If this tablet blocks YouTube embeds, use the alternative below.');
+    // An explicit same-tab fallback works with kiosk browsers that block popups.
+    const fallback=el('a','activities-trailer-fallback','▶ Open on YouTube in this tab');
+    fallback.href='https://www.youtube.com/watch?v='+id;
+    fallback.target='_self';fallback.rel='noopener noreferrer';
+    panel.append(header,area,text,fallback);
+    overlay.append(panel);
+    overlay._focusBefore=focused;
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();},{signal});
+    document.body.append(overlay);state.modal=overlay;
+    close.focus({preventScroll:true});
+  }
   async function feedback(item,value,modalStatus){
     try{
       const r=await fetch('/api/activities/feedback',{method:'POST',credentials:'same-origin',signal,
@@ -217,7 +270,11 @@ window.ActivitiesPanel={
       actions.append(link(item.kind==='movies'?'🎬 TMDB details':'🔗 Event source',item.sourceUrl));
       if(item.kind==='events'&&URLSAFE(item.ticketUrl))actions.append(link('🎟 Tickets / organizer',item.ticketUrl));
       if(item.kind==='movies'){
-        if(URLSAFE(item.trailerUrl))actions.prepend(link('▶ Watch trailer',item.trailerUrl));
+        if(trailerId(item.trailerUrl)){
+          const play=el('button','activities-modal-play','▶ Play trailer here');play.type='button';
+          play.addEventListener('click',()=>openTrailer(item),{signal});
+          actions.prepend(play);
+        }
         if(URLSAFE(item.watch?.link))actions.append(link('📺 Streaming options (CA)',item.watch.link));
         actions.append(link('🎟 Check Ottawa showtimes','https://www.tribute.ca/showtimes/movie/ontario/ottawa/'));
       }
@@ -270,10 +327,10 @@ window.ActivitiesPanel={
       content.append(el('div','activities-line',
         streaming||free?'📺 Canada: '+[streaming,free].filter(Boolean).join(' / '):
         '📺 '+(item.watch?.verified?'Not listed on Canadian streaming':'Streaming not verified')));
-      const trailer=URLSAFE(item.trailerUrl);
-      if(trailer){
-        const a=link('▶ Trailer ↗',trailer);a.className='activities-trailer-link';
-        a.addEventListener('click',e=>e.stopPropagation(),{signal});content.append(a);
+      if(trailerId(item.trailerUrl)){
+        const play=el('button','activities-trailer-link','▶ Play trailer');play.type='button';
+        play.addEventListener('click',e=>{e.stopPropagation();openTrailer(item);},{signal});
+        content.append(play);
       }
       content.append(el('div','activities-line activities-synopsis',item.synopsis||item.reason||'Synopsis unavailable'));
     }else if(item.kind==='events'){
