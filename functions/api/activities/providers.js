@@ -38,47 +38,76 @@ function movieExtras(details){
   };
 }
 
+// All titles are actual Canadian theatrical releases. Start with this month,
+// then widen to recent months only if fewer than 12 eligible films exist.
+// Never pad with fabricated titles or unknown child ratings.
 export async function tmdbMovies(env,opts,now){
   const key=String(env.TMDB_API_KEY||'').trim();
   if(!key)throw Error('TMDB_API_KEY missing. Add a TMDB API Read Access Token to Cloudflare secrets.');
-  const month=now.date.slice(0,7),u=new URL(TMDB+'/discover/movie');
-  Object.entries({region:'CA',language:'en-CA','release_date.gte':month+'-01',
-    'release_date.lte':monthEnd(month),with_release_type:'3|2',
-    sort_by:'popularity.desc',include_adult:'false',page:'1'})
-    .forEach(([k,v])=>u.searchParams.set(k,v));
-  let data;
-  try{data=await getJSON(u.toString(),{headers:auth(key)});}
-  catch(e){
-    if(/Service HTTP (?:401|403)/.test(String(e.message||'')))
-      throw Error('TMDB rejected the credential. Use the API Read Access Token (Bearer), not the API Key v3, in Cloudflare Production.');
-    throw e;
+  const month=now.date.slice(0,7);
+  const first=month+'-01',last=monthEnd(month);
+  const previousEnd=new Date(Date.parse(first+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+  const ago=days=>new Date(Date.parse(first+'T00:00:00Z')-days*86400000).toISOString().slice(0,10);
+  const ranges=[
+    {from:first,to:last,pages:3},
+    {from:ago(120),to:previousEnd,pages:3},
+    {from:ago(240),to:ago(121),pages:3}
+  ];
+  const chosen=[],seen=new Set(),MAX_MOVIES=12;
+  async function discover(from,to,page){
+    const u=new URL(TMDB+'/discover/movie');
+    Object.entries({region:'CA',language:'en-CA','release_date.gte':from,
+      'release_date.lte':to,with_release_type:'3|2',sort_by:'popularity.desc',
+      include_adult:'false',page:String(page)})
+      .forEach(([k,v])=>u.searchParams.set(k,v));
+    try{return await getJSON(u.toString(),{headers:auth(key)});}
+    catch(e){
+      if(/Service HTTP (?:401|403)/.test(String(e.message||'')))
+        throw Error('TMDB rejected the credential. Use the API Read Access Token (Bearer), not API Key v3, in Cloudflare Production.');
+      throw e;
+    }
   }
-  const movies=(data.results||[]).filter(m=>Number.isInteger(m.id)&&m.id>0&&!m.adult)
-    .slice(0,family(opts)?20:16);
-  const results=await Promise.all(movies.map(async m=>{
+  async function candidate(m,from,to){
     try{
       const details=await getJSON(TMDB+'/movie/'+m.id+'?append_to_response=release_dates,videos,watch%2Fproviders&language=en-US',{headers:auth(key)});
       const release=details.release_dates?.results?.find(x=>x.iso_3166_1==='CA');
       const theatrical=(release?.release_dates||[]).filter(x=>
-        [2,3].includes(x.type) && /^\d{4}-\d{2}-\d{2}/.test(x.release_date||'') &&
-        x.release_date.slice(0,7)===month);
+        [2,3].includes(x.type)&&/^\d{4}-\d{2}-\d{2}/.test(x.release_date||'')&&
+        x.release_date.slice(0,10)>=from&&x.release_date.slice(0,10)<=to);
       if(!theatrical.length)return null;
-      theatrical.sort((a,b)=>(a.type===3?0:1)-(b.type===3?0:1)||
-        a.release_date.localeCompare(b.release_date));
+      theatrical.sort((a,b)=>(a.type===3?0:1)-(b.type===3?0:1)||a.release_date.localeCompare(b.release_date));
       const certs=[...new Set(theatrical.map(x=>String(x.certification||'').trim().toUpperCase()).filter(Boolean))];
-      if(family(opts) && (!certs.length||!certs.every(x=>['G','PG'].includes(x))))return null;
+      if(family(opts)&&(!certs.length||!certs.every(x=>['G','PG'].includes(x))))return null;
       const poster=photoPath(m.poster_path||details.poster_path);
       const synopsis=String(details.overview||m.overview||'Synopsis unavailable').slice(0,650);
       return {id:'tmdb:'+m.id,kind:'movies',name:String(m.title||m.original_title||'').slice(0,105),
-        releaseDate:theatrical[0].release_date.slice(0,10),
-        rating:certs[0]||'Unverified',
+        releaseDate:theatrical[0].release_date.slice(0,10),rating:certs[0]||'Unverified',
         reason:synopsis.slice(0,110),synopsis,...movieExtras(details),
         sourceUrl:'https://www.themoviedb.org/movie/'+m.id,
-        posterUrl:poster?'https://image.tmdb.org/t/p/w342'+poster:'',
-        provider:'TMDB'};
+        posterUrl:poster?'https://image.tmdb.org/t/p/w342'+poster:'',provider:'TMDB'};
     }catch{return null;}
-  }));
-  return results.filter(Boolean).sort((a,b)=>a.releaseDate.localeCompare(b.releaseDate)).slice(0,12);
+  }
+  // Batches of six limit simultaneous requests, useful for the Cloudflare
+  // function and the TMDB provider when a profile needs many candidates.
+  for(const range of ranges){
+    for(let page=1;page<=range.pages&&chosen.length<MAX_MOVIES;page++){
+      const data=await discover(range.from,range.to,page);
+      const movies=(Array.isArray(data.results)?data.results:[])
+        .filter(m=>Number.isInteger(m.id)&&m.id>0&&!m.adult&&!seen.has(m.id));
+      for(const movie of movies)seen.add(movie.id);
+      for(let i=0;i<movies.length&&chosen.length<MAX_MOVIES;i+=6){
+        const batch=await Promise.all(movies.slice(i,i+6).map(m=>candidate(m,range.from,range.to)));
+        for(const item of batch)if(item&&chosen.length<MAX_MOVIES)chosen.push(item);
+      }
+      if(!movies.length||page>=Number(data.total_pages||0))break;
+    }
+    if(chosen.length>=MAX_MOVIES)break;
+  }
+  // Retain priority of this month's releases, then most recent backfill.
+  return chosen.sort((a,b)=>{
+    const am=a.releaseDate.startsWith(month),bm=b.releaseDate.startsWith(month);
+    return Number(bm)-Number(am)||b.releaseDate.localeCompare(a.releaseDate);
+  }).slice(0,MAX_MOVIES);
 }
 
 async function eventsFor(date){

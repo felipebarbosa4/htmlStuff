@@ -6,6 +6,7 @@ import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
 import {onRequestPost as savePreference,onRequestGet as listPreferences} from '../functions/api/activities/feedback.js';
 import {onRequestPost as discover,onRequestGet as listedDiscovery} from '../functions/api/activities/discover.js';
+import {tmdbMovies} from '../functions/api/activities/providers.js';
 import {normalizeOptions,learnedCounts} from '../functions/api/activities/config.js';
 import {hoursForDate} from '../functions/api/activities/hours.js';
 
@@ -193,8 +194,8 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
       if(u.includes('/discover/movie')) {
         const p=new URL(u);
         assert.equal(p.searchParams.get('region'),'CA');
-        assert.equal(p.searchParams.get('release_date.gte'),'2026-10-01');
         assert.equal(p.searchParams.get('with_release_type'),'3|2');
+        if(p.searchParams.get('release_date.gte')!=='2026-10-01')return response({results:[],total_pages:1});
         return response({results:[{id:1,title:'Family Film',poster_path:'/poster.jpg',overview:'Family adventure'},
           {id:2,title:'Adult Film',poster_path:'/adult.jpg'},
           {id:3,title:'Unrated Film',poster_path:null}]});
@@ -347,4 +348,56 @@ test('date-specific opening hours respect split shifts, overnight hours and unve
   assert.equal(hoursForDate(null,date,date).verified,false);
   assert.equal(hoursForDate(hours,'2026-10-20',date).verified,false);
   assert.equal(hoursForDate({periods:[{open:point(22,0)}]},date,date).label,'Open 24 hours');
+});
+
+test('TMDB fetches up to 12 distinct CA theatrical movies, prioritizes month and backfills recent G/PG',async()=>{
+  const oldFetch=global.fetch,OriginalDate=global.Date, calls=[];
+  const date=OriginalDate.parse('2026-10-22T15:00:00Z');
+  global.Date=class extends OriginalDate{constructor(...args){super(...(args.length?args:[date]));}static now(){return date;}};
+  try{
+    global.fetch=async(url,options={})=>{
+      const u=new URL(String(url));calls.push(u.href);
+      assert.equal(options.headers?.Authorization,'Bearer tmdb-token');
+      assert.equal(u.hostname,'api.themoviedb.org','TMDB must not call OpenAI');
+      if(u.pathname==='/3/discover/movie'){
+        assert.equal(u.searchParams.get('region'),'CA');
+        assert.equal(u.searchParams.get('with_release_type'),'3|2');
+        const current=u.searchParams.get('release_date.gte')==='2026-10-01';
+        // Only three of this month's candidates are family certified.
+        if(current)return new Response(JSON.stringify({results:[1,2,3].map(id=>({id,title:'This month '+id})),total_pages:1}));
+        return new Response(JSON.stringify({results:Array.from({length:18},(_,i)=>({id:i+4,title:'Recent title '+i})),total_pages:1}));
+      }
+      if(u.pathname.startsWith('/3/movie/')){
+        assert.equal(u.searchParams.get('append_to_response'),'release_dates,videos,watch/providers');
+        const id=Number(u.pathname.split('/')[3]);
+        const recent=id>3;
+        return new Response(JSON.stringify({overview:'Verified from TMDB',release_dates:{results:[{
+          iso_3166_1:'CA',release_dates:[{type:3,release_date:recent?'2026-09-10T00:00:00Z':'2026-10-10T00:00:00Z',certification:'PG'}]
+        }]},'watch/providers':{results:{}},videos:{results:[]}}));
+      }
+      throw Error('Unexpected '+u.href);
+    };
+    const result=await tmdbMovies({TMDB_API_KEY:'tmdb-token'},{mode:'family',kids:2}, {date:'2026-10-22'});
+    assert.equal(result.length,12);
+    assert.equal(new Set(result.map(x=>x.id)).size,12);
+    assert.ok(result.slice(0,3).every(x=>x.releaseDate==='2026-10-10'));
+    assert.ok(result.slice(3).every(x=>x.releaseDate==='2026-09-10'));
+    assert.ok(result.every(x=>x.rating==='PG'));
+    assert.ok(calls.some(x=>x.includes('release_date.gte=2026-10-01')));
+    assert.ok(calls.some(x=>x.includes('release_date.gte=2026-06')));
+    assert.ok(!calls.some(x=>x.includes('api.openai.com')));
+  }finally{global.fetch=oldFetch;global.Date=OriginalDate;}
+});
+test('TMDB returns truthful count when fewer than nine age-verified Canadian films exist',async()=>{
+  const oldFetch=global.fetch;
+  try{
+    global.fetch=async(url)=>{
+      const u=new URL(String(url));
+      if(u.pathname==='/3/discover/movie')return new Response(JSON.stringify({results:[{id:333,title:'One Film'}],total_pages:1}));
+      if(u.pathname==='/3/movie/333')return new Response(JSON.stringify({release_dates:{results:[{iso_3166_1:'CA',release_dates:[{type:3,release_date:'2026-10-15T00:00:00Z',certification:'PG'}]}]}}));
+      throw Error('Unexpected request');
+    };
+    const items=await tmdbMovies({TMDB_API_KEY:'token'},{mode:'family',kids:2},{date:'2026-10-22'});
+    assert.equal(items.length,1);
+  }finally{global.fetch=oldFetch;}
 });
