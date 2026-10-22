@@ -6,7 +6,15 @@ import {tmdbMovies,hasThingsEvents,movieCredit,eventCredit} from './providers.js
 // Only the optional events fallback invokes OpenAI web_search.
 // Movies exclusively use TMDB; normal events use the open Has Things feed.
 const CACHE_PREFIX='family:activities:discovery:v2:';
-const keyword=(kind,mode,maxKm=20)=>CACHE_PREFIX+(kind==='movies'?'tmdb-v3':'events')+':'+mode+(kind==='events'?':'+maxKm+'km':'');
+// Kids and adult movie audiences MUST NOT share a cached list. Legacy cache
+// remains readable only after strict on-read child-age filtering.
+export const kidAppropriateMovie=x=>['G','PG'].includes(String(x?.rating||'').trim().toUpperCase());
+const movieAudience=opts=>opts.kids>0?'kids':'adults';
+const keyword=(kind,mode,maxKm=20,opts={kids:0})=>CACHE_PREFIX+
+  (kind==='movies'?'tmdb-v4':'events')+':'+mode+
+  (kind==='movies'?':'+movieAudience(opts):':'+maxKm+'km');
+const legacyMovieKey=mode=>CACHE_PREFIX+'tmdb-v3:'+mode;
+
 function parsedResponse(data){
   const text=(data.output||[]).flatMap(x=>(x.content||[]).filter(y=>y.type==='output_text').map(y=>y.text)).join('\n')
     ||data.output_text||'';
@@ -116,15 +124,19 @@ async function verifyEventDistances(env,items,maxKm=20){
 export async function onRequestGet({request,env}){
   if(!env.ACTIVITIES_KV)return json({items:[],generatedAt:null});
   const u=new URL(request.url),kind=u.searchParams.get('kind')==='movies'?'movies':'events';
-  const opts=normalizeOptions({mode:u.searchParams.get('mode'),maxKm:u.searchParams.get('maxKm')});
+  const opts=normalizeOptions({mode:u.searchParams.get('mode'),maxKm:u.searchParams.get('maxKm'),
+    kidsYes:u.searchParams.get('kidsYes')==='true'});
   const mode=opts.mode;
   try{
-    const saved=await env.ACTIVITIES_KV.get(keyword(kind,mode,opts.maxKm),'json');
+    const saved=await env.ACTIVITIES_KV.get(keyword(kind,mode,opts.maxKm,opts),'json')||
+      (kind==='movies'?await env.ACTIVITIES_KV.get(legacyMovieKey(mode),'json'):null);
     if(!saved)return json({items:[],kind,mode,generatedAt:null});
     const now=local();
     // TMDB backfills recent months to reach 12 valid releases. Keep those
     // legitimately saved movies; excluding them on GET loses most of the list.
-    const items=(saved.items||[]).filter(x=>kind==='movies'?/^\d{4}-\d{2}-\d{2}$/.test(x.releaseDate||''):
+    const items=(saved.items||[]).filter(x=>kind==='movies'?
+      /^\d{4}-\d{2}-\d{2}$/.test(x.releaseDate||'') &&
+      (opts.kids===0||kidAppropriateMovie(x)):
       x.date===now.date&&x.time&&(Number(x.time.slice(0,2))*60+Number(x.time.slice(3)))>=now.minute);
     return json({...saved,items});
   }catch{return json({error:'Saved discovery could not be loaded'},502);}
@@ -136,13 +148,13 @@ export async function onRequestPost({request,env}){
     const input=await request.json(),kind=input.kind==='movies'?'movies':'events';
     const opts=normalizeOptions(input),now=local();
     if(kind==='movies'&&!env.TMDB_API_KEY)return json({error:'TMDB_API_KEY missing. Add your TMDB API Read Access Token in Cloudflare Production secrets.'},503);
-    const key=keyword(kind,opts.mode,opts.maxKm),limit=key+':last-request';
+    const key=keyword(kind,opts.mode,opts.maxKm,opts),limit=key+':last-request';
     const last=Number(await env.ACTIVITIES_KV.get(limit)||0);
     if(Date.now()-last<90000)return json({error:'Please wait before another discovery refresh'},429);
     await env.ACTIVITIES_KV.put(limit,String(Date.now()),{expirationTtl:120});
     let items=[],fallbackUsed=false,feedFailed=false;
     if(kind==='movies'){
-      items=await tmdbMovies(env,opts,now);
+      items=(await tmdbMovies(env,opts,now)).filter(x=>opts.kids===0||kidAppropriateMovie(x));
     }else{
       try{items=await hasThingsEvents(env,opts,now);}
       catch{feedFailed=true;}

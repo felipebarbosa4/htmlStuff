@@ -5,7 +5,7 @@ import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
 import {onRequestPost as savePreference,onRequestGet as listPreferences} from '../functions/api/activities/feedback.js';
-import {onRequestPost as discover,onRequestGet as listedDiscovery} from '../functions/api/activities/discover.js';
+import {onRequestPost as discover,onRequestGet as listedDiscovery,kidAppropriateMovie} from '../functions/api/activities/discover.js';
 import {tmdbMovies,movieOverviewPtBr,tmdbUserScore} from '../functions/api/activities/providers.js';
 import {normalizeOptions,learnedCounts} from '../functions/api/activities/config.js';
 import {hoursForDate} from '../functions/api/activities/hours.js';
@@ -262,7 +262,7 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
     assert.deepEqual(result.items[0].watch.rent,['Apple TV Store']);
     assert.equal(result.items[0].watch.verified,true);
     assert.equal(result.sourceCredit.url,'https://www.themoviedb.org/about/logos-attribution');
-    const read=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
+    const read=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family&kidsYes=true'),env});
     assert.equal((await read.json()).items.length,1);
     assert.ok(calls.every(x=>x.startsWith('https://api.themoviedb.org/')));
   }finally{global.fetch=oldFetch;global.Date=OriginalDate;}
@@ -518,12 +518,70 @@ test('TMDB pt-BR overview uses published Brazil translation and never pretends E
 });
 test('saved TMDB movie backfill keeps prior-month films on GET without a second API call',async()=>{
   const current='2026-10-12',prior='2026-09-11';
-  const saved={kind:'movies',items:[{name:'October movie',releaseDate:current},
-    {name:'September movie',releaseDate:prior}]};
+  const saved={kind:'movies',items:[{name:'October movie',releaseDate:current,rating:'G'},
+    {name:'September movie',releaseDate:prior,rating:'PG'}]};
   const env={ACTIVITIES_KV:{get:async(k)=>k.endsWith('tmdb-v3:family')?saved:null}};
-  const res=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
+  const res=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family&kidsYes=true'),env});
   assert.equal(res.status,200);
   const data=await res.json();
   assert.equal(data.items.length,2);
   assert.deepEqual(data.items.map(x=>x.releaseDate),[current,prior]);
+});
+
+test('Kids Yes strictly filters saved legacy movie cache; switching to No restores adults without TMDB calls',async()=>{
+ const old={kind:'movies',generatedAt:'2026-10-22T14:00:00Z',items:[
+  {id:'1',name:'Suitable',releaseDate:'2026-10-10',rating:'PG'},
+  {id:'2',name:'Adult',releaseDate:'2026-10-12',rating:'14A'},
+  {id:'3',name:'Unknown',releaseDate:'2026-10-17',rating:'Unverified'}]};
+ const env={ACTIVITIES_KV:{get:async k=>k==='family:activities:discovery:v2:tmdb-v3:family'?old:null}};
+ const url='https://dashboard.example.org/api/activities/discover?kind=movies&mode=family&kidsYes=';
+ const kid=await listedDiscovery({request:new Request(url+'true'),env});
+ assert.deepEqual((await kid.json()).items.map(x=>x.id),['1']);
+ const adults=await listedDiscovery({request:new Request(url+'false'),env});
+ assert.deepEqual((await adults.json()).items.map(x=>x.id),['1','2','3']);
+ assert.equal(kidAppropriateMovie({rating:'14A'}),false);
+ assert.equal(kidAppropriateMovie({rating:'Unverified'}),false);
+ assert.equal(kidAppropriateMovie({rating:'PG'}),true);
+});
+test('movie refresh separates kid and adult caches and never returns 14A for Kids Yes',async()=>{
+ const store=new Map(),requests=[];
+ const env={TMDB_API_KEY:'test',ACTIVITIES_KV:{
+  get:async k=>store.get(k)||null,put:async(k,v)=>store.set(k,v)}};
+ const oldFetch=global.fetch;
+ global.fetch=async(u,opts)=>{
+  requests.push(String(u));const url=new URL(String(u));
+  if(url.pathname==='/3/discover/movie')return new Response(JSON.stringify({results:[{id:1,title:'Family Adventure'},{id:2,title:'Horror'}],total_pages:1}));
+  if(url.pathname.startsWith('/3/movie/')){
+   const id=Number(url.pathname.split('/')[3]);
+   return new Response(JSON.stringify({release_dates:{results:[{iso_3166_1:'CA',release_dates:[
+    {type:3,release_date:'2026-10-15T00:00:00Z',certification:id===1?'G':'14A'}]}]},
+    translations:{translations:[]}}));
+  }
+  throw Error('Unexpected '+u);
+ };
+ try{
+  const make=kidsYes=>new Request('https://dashboard.example.org/api/activities/discover',{
+   method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
+   body:JSON.stringify({kind:'movies',mode:'family',kidsYes})});
+  const r1=await discover({request:make(true),env});assert.equal(r1.status,200,await r1.clone().text());
+  assert.deepEqual((await r1.json()).items.map(x=>x.rating),['G']);
+  const r2=await discover({request:make(false),env});assert.equal(r2.status,200,await r2.clone().text());
+  assert.deepEqual((await r2.json()).items.map(x=>x.rating),['G','14A']);
+  assert([...store.keys()].some(k=>k.endsWith('tmdb-v4:family:kids')));
+  assert([...store.keys()].some(k=>k.endsWith('tmdb-v4:family:adults')));
+  assert(requests.length<50);
+ }finally{global.fetch=oldFetch;}
+});
+test('TMDB external requests remain under Workers Free subrequest limit with 200 unverified candidates',async()=>{
+ const previous=global.fetch;let count=0;
+ global.fetch=async(u)=>{
+   count++;if(count>38)throw Error('Too many TMDB requests');
+   const url=new URL(String(u));
+   if(url.pathname==='/3/discover/movie')return new Response(JSON.stringify({results:Array.from({length:20},(_,i)=>({id:count*100+i+1,title:'No Certification'})),total_pages:3}));
+   return new Response(JSON.stringify({release_dates:{results:[]}}));
+ };
+ try{
+  const films=await tmdbMovies({TMDB_API_KEY:'x'},{mode:'family',kids:2},{date:'2026-10-22'});
+  assert.deepEqual(films,[]);assert(count<=38,'subrequest cap must be enforced');
+ }finally{global.fetch=previous;}
 });
