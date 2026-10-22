@@ -297,3 +297,31 @@
 }
 .activities-pages{flex-shrink:0;color:#87e8db;font-weight:850;white-space:nowrap}
 .activities-carousel:focus-visible{outline:2px solid #73eadb;outline-offset:-2px;border-radius:10px}
+
+/* At Home: same touch-friendly square-card grid as Ideas/Movies. */
+.activities-root.activities-home .activities-grid{gap:8px}
+.activities-root.activities-home .activities-card{min-height:0;min-width:0}
+.activities-root.activities-home .activities-photo{width:clamp(100px,12vw,150px);min-width:100px}
+.activities-root.activities-home .activities-home-art{
+ display:flex;align-items:center;justify-content:center;font-size:clamp(48px,6vw,78px);
+ width:100%;height:100%;background:linear-gradient(145deg,#205e79,#304d7f)
+}
+.activities-root.activities-home .activities-description{justify-content:center;gap:5px;padding:8px 11px}
+.activities-root.activities-home .activities-name{font-size:clamp(14px,1.55vw,20px)}
+.activities-root.activities-home .activities-line{font-size:clamp(11px,1.05vw,14px);line-height:1.24}
+.activities-root.activities-home .activities-home-step{color:#9cf6e8}
+.activities-root.activities-home .activities-filters .activities-select,
+.activities-root.activities-home .activities-filters .activities-env{display:none}
+.activities-root.activities-home .activities-filters{background:transparent;border:0;padding:0}
+@media (max-height:730px){
+ .activities-root.activities-home .activities-description{gap:3px;padding:5px 9px}
+ .activities-root.activities-home .activities-photo{width:clamp(90px,10vw,120px);min-width:90px}
+}
+
+/* Kids remains accessible in Movies even on short landscape viewports. */
+@media(max-height:500px){
+ .activities-root.activities-movies .activities-filters{display:flex;padding:0;min-height:30px;background:transparent;border:0}
+ .activities-root.activities-movies .activities-filters .activities-select,
+ .activities-root.activities-movies .activities-filters .activities-env{display:none}
+ .activities-root.activities-movies .activities-kids button{min-height:29px;padding:3px 7px}
+}

@@ -70,13 +70,18 @@ export async function tmdbMovies(env,opts,now){
     {from:ago(120),to:previousEnd,pages:3},
     {from:ago(240),to:ago(121),pages:3}
   ];
-  const chosen=[],seen=new Set(),MAX_MOVIES=12;
+  // Free Workers permit 50 external subrequests per invocation. Cap TMDB
+  // discovery + detail calls below that, leaving room for other services.
+  const chosen=[],seen=new Set(),MAX_MOVIES=12,MAX_TMDB_REQUESTS=38;
+  let tmdbRequests=0;
   async function discover(from,to,page){
     const u=new URL(TMDB+'/discover/movie');
     Object.entries({region:'CA',language:'en-CA','release_date.gte':from,
       'release_date.lte':to,with_release_type:'3|2',sort_by:'popularity.desc',
       include_adult:'false',page:String(page)})
       .forEach(([k,v])=>u.searchParams.set(k,v));
+    if(tmdbRequests>=MAX_TMDB_REQUESTS)return {results:[],total_pages:0};
+    tmdbRequests++;
     try{return await getJSON(u.toString(),{headers:auth(key)});}
     catch(e){
       if(/Service HTTP (?:401|403)/.test(String(e.message||'')))
@@ -85,6 +90,8 @@ export async function tmdbMovies(env,opts,now){
     }
   }
   async function candidate(m,from,to){
+    if(tmdbRequests>=MAX_TMDB_REQUESTS)return null;
+    tmdbRequests++;
     try{
       const details=await getJSON(TMDB+'/movie/'+m.id+'?append_to_response=release_dates,videos,watch%2Fproviders,translations&language=en-US',{headers:auth(key)});
       const release=details.release_dates?.results?.find(x=>x.iso_3166_1==='CA');
@@ -110,13 +117,13 @@ export async function tmdbMovies(env,opts,now){
   // Batches of six limit simultaneous requests, useful for the Cloudflare
   // function and the TMDB provider when a profile needs many candidates.
   for(const range of ranges){
-    for(let page=1;page<=range.pages&&chosen.length<MAX_MOVIES;page++){
+    for(let page=1;page<=range.pages&&chosen.length<MAX_MOVIES&&tmdbRequests<MAX_TMDB_REQUESTS;page++){
       const data=await discover(range.from,range.to,page);
       const movies=(Array.isArray(data.results)?data.results:[])
         .filter(m=>Number.isInteger(m.id)&&m.id>0&&!m.adult&&!seen.has(m.id));
       for(const movie of movies)seen.add(movie.id);
-      for(let i=0;i<movies.length&&chosen.length<MAX_MOVIES;i+=6){
-        const batch=await Promise.all(movies.slice(i,i+6).map(m=>candidate(m,range.from,range.to)));
+      for(let i=0;i<movies.length&&chosen.length<MAX_MOVIES&&tmdbRequests<MAX_TMDB_REQUESTS;i+=6){
+        const batch=await Promise.all(movies.slice(i,i+Math.min(6,MAX_TMDB_REQUESTS-tmdbRequests)).map(m=>candidate(m,range.from,range.to)));
         for(const item of batch)if(item&&chosen.length<MAX_MOVIES)chosen.push(item);
       }
       if(!movies.length||page>=Number(data.total_pages||0))break;

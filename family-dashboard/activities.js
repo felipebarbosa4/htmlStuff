@@ -48,7 +48,7 @@ const fmt=()=>{
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date());
  return parts;
 };
-const types={ideas:'Ideas',events:'Events Today',movies:'Movies This Month'};
+const types={ideas:'Ideas',events:'Events Today',movies:'Movies This Month',home:'At Home'};
 const budgets=[['free','Free'],['under100','Under $100'],['any','Any budget']];
 const envs=[['all','Both'],['indoor','Indoor'],['outdoor','Outdoor']];
 const defaults={family:{adults:2,kids:2},couple:{adults:2,kids:0},visits:{adults:4,kids:2}};
@@ -69,7 +69,7 @@ window.ActivitiesPanel={
       <label class="activities-select">Budget<select id="ideas-budget" aria-label="Budget"><option value="free">Free</option><option value="under100">Under $100</option><option value="any">Any budget</option></select></label><label class="activities-select">Distance<select id="ideas-distance" aria-label="Maximum driving distance"><option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option><option value="30">30 km</option><option value="50">50 km</option></select></label>
       <div class="activities-env" role="group" aria-label="Activity environment"><button data-env="all">Both</button><button data-env="indoor">Indoor</button><button data-env="outdoor">Outdoor</button></div>
     </div>
-    <div class="activities-tabs" role="tablist" aria-label="Recommendations sections"><button role="tab" data-kind="ideas">✨ Ideas</button><button role="tab" data-kind="events">🎟 Events</button><button role="tab" data-kind="movies">🎬 Movies</button></div>
+    <div class="activities-tabs" role="tablist" aria-label="Recommendations sections"><button role="tab" data-kind="ideas">✨ Ideas</button><button role="tab" data-kind="events">🎟 Events</button><button role="tab" data-kind="movies">🎬 Movies</button><button role="tab" data-kind="home">🏠 At Home</button></div>
   </div>
   <div class="activities-carousel" id="ideas-grid" tabindex="0" aria-label="Deslize horizontalmente para ver mais recomendações" aria-live="polite"><div class="activities-track" id="ideas-track"></div></div>
   <div class="activities-footer"><span id="ideas-caption">📍 20 km by road · Google Maps</span><div class="activities-pages"><span id="ideas-page">Deslize ← → · 1 / 1</span></div></div>`;
@@ -81,6 +81,7 @@ window.ActivitiesPanel={
     environment:['all','indoor','outdoor'].includes(savedControls.environment)?savedControls.environment:'all',
     maxKm:[5,10,20,30,50].includes(Number(savedControls.maxKm))?Number(savedControls.maxKm):20,
     kind:'ideas',adults:2,kids:2,items:[],snapshot:null,
+    homeRotation:(()=>{try{return Math.max(0,Number(localStorage.getItem('family:activities:home:rotation')||0));}catch{return 0;}})(),
     page:0,error:'',busy:false,feedback:new Map(),modal:null
   };
   Object.assign(state,defaults[state.mode]);
@@ -99,6 +100,7 @@ window.ActivitiesPanel={
       const rows=available>=570?3:available>=280?2:1;
       return columns*rows;
     }
+    if(state.kind==='home')return window.innerWidth>=740&&available>=280?4:available>=180?2:1;
     if(state.kind==='ideas'){
       // Two columns by two rows on tablets. Small landscape phone views
       // gracefully fall back rather than clipping the 7 information lines.
@@ -106,11 +108,32 @@ window.ActivitiesPanel={
     }
     return available<240?1:2;
   }
+  const kidSafeMovie=x=>['G','PG'].includes(String(x?.rating||'').trim().toUpperCase());
+  const visibleMovies=items=>state.kids>0?items.filter(kidSafeMovie):items;
+  const homeItems=()=>window.HomeIdeas?.generate({kids:state.kids>0,mode:state.mode,rotation:state.homeRotation})||[];
+  // This does NOT search for a new title. It only uses the family's already
+  // saved Canadian G/PG movie listing when streaming is explicitly listed.
+  const homeMovie=films=>{
+    const best=(Array.isArray(films)?films:[]).filter(x=>(state.kids===0||kidSafeMovie(x))&&
+      x.watch?.verified===true&&(x.watch?.subscription?.length||x.watch?.free?.length)&&URLSAFE(x.sourceUrl))
+      .sort((a,b)=>Number(b.rating==='G')-Number(a.rating==='G'))[0];
+    if(!best)return null;
+    const service=[...(best.watch.subscription||[]),...(best.watch.free||[])].slice(0,2).join(', ');
+    return {id:'home:stream:'+best.id,kind:'home',name:'Cinema: '+best.name,icon:'🎬',
+      duration:110,bring:'Pipoca, cobertor e acesso ao serviço informado',
+      why:'Filme '+best.rating+' que consta no catálogo canadense de '+service,
+      steps:['Confirme se o título ainda está disponível em '+service,
+        'Confira conteúdo e adequação para Apollo e Luna, especialmente se for PG',
+        'Preparem pipoca e conversem sobre as cenas favoritas ao terminar'],
+      sourceUrl:best.sourceUrl,posterUrl:best.posterUrl||'',category:'home'};
+  };
   function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode):
-    '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+'&maxKm='+state.maxKm;}
+    '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+
+      '&maxKm='+state.maxKm+'&kidsYes='+(state.kids>0?'true':'false');}
   function controls(){
     root.classList.toggle('activities-movies',state.kind==='movies');
     root.classList.toggle('activities-ideas',state.kind==='ideas');
+    root.classList.toggle('activities-home',state.kind==='home');
     for(const b of root.querySelectorAll('[data-mode-choice]'))b.classList.toggle('selected',b.dataset.modeChoice===state.mode);
     for(const b of root.querySelectorAll('[data-env]'))b.classList.toggle('selected',b.dataset.env===state.environment);
     for(const b of root.querySelectorAll('[data-kind]')){
@@ -118,9 +141,10 @@ window.ActivitiesPanel={
     }
     for(const b of root.querySelectorAll('[data-kids]'))b.classList.toggle('selected',(b.dataset.kids==='yes')===(state.kids>0));
     q('#ideas-budget').value=state.budget;q('#ideas-distance').value=String(state.maxKm);
-    refresh.textContent=state.busy?'⏳ Checking…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':'↻ Find Movies';
+    refresh.textContent=state.busy?'⏳ Conferindo…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':state.kind==='home'?'↻ Outras ideias':'↻ Find Movies';
     refresh.disabled=state.busy;
-    caption.textContent=state.kind==='ideas'?'📍 '+state.maxKm+' km by road · Google Maps location/hours · Admission sourced separately':
+    caption.textContent=state.kind==='home'?'🏠 Atividades em casa · fontes: PBS KIDS, Science World, NASA e AAP · sem custos de IA':
+      state.kind==='ideas'?'📍 '+state.maxKm+' km by road · Google Maps location/hours · Admission sourced separately':
       state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
       '🎬 Canadian releases: this month + recent · This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.';
     caption.replaceChildren(document.createTextNode(caption.textContent));
@@ -257,7 +281,13 @@ window.ActivitiesPanel={
         watchNames(watch.buy)?'Buy: '+watchNames(watch.buy):''
       ].filter(Boolean).join(' · '):
       'No Canadian streaming providers listed (check back later)';
-    const lines=item.kind==='movies'?[
+    const lines=item.kind==='home'?[
+      '⏱ Duração sugerida: '+item.duration+' min',
+      '🎒 O que separar: '+item.bring,
+      '💡 Por que fazer: '+item.why,
+      ...item.steps.map((step,i)=>(i+1)+'. '+step),
+      '📖 Sugestão inspirada em material educativo; adapte à idade e supervisione atividades.'
+    ]:item.kind==='movies'?[
       '🍿 Estreia no Canadá: '+item.releaseDate,
       '🎫 Classificação etária canadense: '+item.rating,
       '⭐ Nota dos usuários TMDB: '+(movieScore(item)===null?'Ainda sem avaliações':movieScore(item)+'% ('+item.userScoreVotes+' votos)'),
@@ -294,6 +324,9 @@ window.ActivitiesPanel={
         'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(item.address):
         'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(item.name+', '+item.address)+'&destination_place_id='+encodeURIComponent(item.id);
       actions.append(link('🗺 Directions',mapUrl));
+    }
+    if(item.kind==='home'&&URLSAFE(item.sourceUrl)){
+      const a=link('📚 Ver fonte e ideias originais',item.sourceUrl);a.target='_self';actions.append(a);
     }
     if(item.kind==='ideas'){
       if(URLSAFE(item.website))actions.append(link('🌐 Website / admission',item.website));
@@ -338,12 +371,17 @@ window.ActivitiesPanel={
   }
   function card(item){
     const article=el('article','activities-card');
-    if(item.kind==='movies')article.classList.add('activities-card-movie');article.tabIndex=0;article.setAttribute('role','button');
+    if(item.kind==='movies')article.classList.add('activities-card-movie');
+    if(item.kind==='home')article.classList.add('activities-card-home');
+    article.tabIndex=0;article.setAttribute('role','button');
     article.setAttribute('aria-label',item.name+' – details');
     article.addEventListener('click',e=>{if(e.target.closest('a'))return;details(item);},{signal});
     article.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();details(item);}},{signal});
     const photo=el('div','activities-photo');
-    if(item.kind==='ideas')photoFor(item,photo,state.mode);
+    if(item.kind==='home'&&URLSAFE(item.posterUrl)){
+      const img=el('img','activities-movie-poster');img.alt='Capa de '+item.name;img.src=item.posterUrl;photo.append(img);
+    }else if(item.kind==='home')photo.append(el('span','activities-home-art',item.icon||'🏡'));
+    else if(item.kind==='ideas')photoFor(item,photo,state.mode);
     else if(item.kind==='movies'&&URLSAFE(item.posterUrl)){
       const img=el('img','activities-movie-poster');img.alt='Poster for '+item.name;
       img.loading='lazy';img.referrerPolicy='no-referrer';
@@ -363,7 +401,7 @@ window.ActivitiesPanel={
       }
       badges.append(el('span','activities-type',item.rating));
       heading.append(badges);
-    }else heading.append(el('span','activities-type',item.kind==='events'?'EVENT':item.category.toUpperCase()));
+    }else heading.append(el('span','activities-type',item.kind==='events'?'EVENT':item.kind==='home'?'CASA':item.category.toUpperCase()));
     content.append(heading);
     if(item.kind==='movies'){
       content.append(el('div','activities-line','📅 Estreia no Canadá: '+item.releaseDate+' · '+item.rating));
@@ -378,6 +416,11 @@ window.ActivitiesPanel={
         content.append(play);
       }
       content.append(el('div','activities-line activities-synopsis',movieSynopsis(item)));
+    }else if(item.kind==='home'){
+      content.append(el('div','activities-line','⏱ '+item.duration+' min · '+item.why),
+        el('div','activities-line','🎒 '+item.bring),
+        el('div','activities-line activities-home-step','✨ '+item.steps[0]),
+        el('div','activities-line','Toque para ver o passo a passo'));
     }else if(item.kind==='events'){
       content.append(el('div','activities-line','📆 Today · '+item.time+' · '+item.venue),
         el('div','activities-line','📍 '+item.km+' km / '+item.driveMinutes+' min by car'),
@@ -407,8 +450,9 @@ window.ActivitiesPanel={
   function render(){
     if(!active())return;
     controls();fit();track.replaceChildren();
-    const arr=state.items,pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
-    const columns=((state.kind==='movies'||state.kind==='ideas')&&window.innerWidth>=740&&
+    const arr=state.kind==='movies'?visibleMovies(state.items):state.items;
+    const pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
+    const columns=((state.kind==='movies'||state.kind==='ideas'||state.kind==='home')&&window.innerWidth>=740&&
       (state.kind==='movies'||grid.getBoundingClientRect().height>=200))?2:1;
     state.page=Math.max(0,Math.min(max-1,state.page));
     renderedPages=max;
@@ -426,7 +470,7 @@ window.ActivitiesPanel={
         const panel=el('div','activities-grid');
         panel.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
         // Fit exactly the visible rows in this page: no blank, compressed rows.
-        const rows=state.kind==='movies'||state.kind==='ideas'?
+        const rows=state.kind==='movies'||state.kind==='ideas'||state.kind==='home'?
           Math.ceil(pageItems.length/columns):
           Math.max(pageItems.length,grid.getBoundingClientRect().height>=300?2:1);
         panel.style.gridTemplateRows='repeat('+Math.max(1,rows)+',minmax(0,1fr))';
@@ -439,7 +483,10 @@ window.ActivitiesPanel={
     const last=state.snapshot?.generatedAt;
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
-    meta.textContent=(last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
+    meta.textContent=(state.kind==='home'?'Atividades selecionadas para casa':
+      last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
+      (state.kind==='home'?' · '+arr.length+' atividades para '+(state.kids>0?'crianças e família':'adultos'):'')+
+      (state.kind==='movies'&&state.kids>0&&state.items.length>arr.length?' · '+(state.items.length-arr.length)+' filmes 14A/sem classificação ocultados':'')+
       (state.kind==='movies'&&arr.length?' · '+arr.length+' filmes confirmados'+
         (arr.some(x=>x.metadataVersion!==2)?' · Atualize para nota e sinopse em PT-BR':''):'')+
       (state.kind==='ideas'&&arr.length&&state.snapshot?.locale!=='pt-BR'?
@@ -448,12 +495,32 @@ window.ActivitiesPanel={
   }
   async function load(){
     if(!active())return;
-    const selectedKind=state.kind,selectedMode=state.mode;
+    const selectedKind=state.kind,selectedMode=state.mode,selectedKids=state.kids;
+    if(selectedKind==='home'){
+      state.error='';state.snapshot={generatedAt:null};state.items=homeItems();state.page=0;render();
+      // Optional 12th slot uses a SAVED, Canadian-available movie. Never
+      // triggers TMDB search, never recommends adult/unknown-rated films to kids.
+      try{
+        const r=await fetch(urlFor('movies'),{cache:'no-store',credentials:'same-origin',signal});
+        if(!r.ok)return;
+        const d=await r.json();
+        if(!active()||state.kind!=='home'||state.kids!==selectedKids||state.mode!==selectedMode)return;
+        const candidate=homeMovie(d.items);
+        if(candidate){
+          const list=homeItems();const index=list.findIndex(x=>x.id==='home:movie');
+          if(index>=0)list[index]=candidate;
+          else list.splice(3,0,candidate);
+          state.items=list.slice(0,12);render();
+        }
+      }catch{} // Curated home activities work offline.
+      return;
+    }
     state.error='';state.items=[];state.snapshot=null;state.page=0;render();
     try{
       const r=await fetch(urlFor(selectedKind),{cache:'no-store',credentials:'same-origin',signal});
       const d=await r.json();if(!r.ok)throw Error(d.error||'Unable to load saved ideas');
-      if(!active()||state.kind!==selectedKind||state.mode!==selectedMode)return;
+      if(!active()||state.kind!==selectedKind||state.mode!==selectedMode||
+         (selectedKind==='movies'&&state.kids!==selectedKids))return;
       state.snapshot=d;state.items=(d.items||[]).map(x=>({...x,kind:selectedKind}));
       state.page=0;
     }catch(e){if(active())state.error=e.message||'Load failed';}
@@ -469,13 +536,16 @@ window.ActivitiesPanel={
   }
   async function generate(){
     if(state.busy)return;
-    state.busy=true;state.error='';const kind=state.kind,mode=state.mode;render();
+    if(state.kind==='home'){state.homeRotation++;
+      try{localStorage.setItem('family:activities:home:rotation',String(state.homeRotation));}catch{}
+      load();return;}
+    state.busy=true;state.error='';const kind=state.kind,mode=state.mode,kids=state.kids;render();
     try{
       const target=kind==='ideas'?'/api/activities/generate':'/api/activities/discover';
       const r=await fetch(target,{method:'POST',credentials:'same-origin',cache:'no-store',signal,
         headers:{'content-type':'application/json'},body:JSON.stringify({...params(),kind})});
       const d=await r.json();if(!r.ok)throw Error(d.error||'Generation failed');
-      if(state.mode!==mode||state.kind!==kind)return;
+      if(state.mode!==mode||state.kind!==kind||(kind==='movies'&&state.kids!==kids))return;
       state.snapshot=d;state.items=(d.items||[]).map(x=>({...x,kind}));
       state.page=0;
     }catch(e){state.error=e.message||'Generation failed. Old results are still stored.';}
@@ -493,7 +563,8 @@ window.ActivitiesPanel={
     state.environment=btn.dataset.env;persist();render();
   },{signal});
   for(const btn of root.querySelectorAll('[data-kids]'))btn.addEventListener('click',()=>{
-    state.kids=btn.dataset.kids==='yes'?2:0;persist();render();
+    state.kids=btn.dataset.kids==='yes'?2:0;persist();
+    if(state.kind==='movies'||state.kind==='home')load();else render();
   },{signal});
   q('#ideas-budget').addEventListener('change',e=>{state.budget=e.target.value;persist();render();},{signal});
   q('#ideas-distance').addEventListener('change',e=>{
