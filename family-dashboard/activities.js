@@ -28,7 +28,7 @@ window.ActivitiesPanel={
     <div class="activities-filters">
       <div class="activities-count"><span>Adults</span><button data-count="adults" data-step="-1" aria-label="Remove adult">−</button><strong id="count-adults">2</strong><button data-count="adults" data-step="1" aria-label="Add adult">+</button></div>
       <div class="activities-count"><span>Kids</span><button data-count="kids" data-step="-1" aria-label="Remove child">−</button><strong id="count-kids">2</strong><button data-count="kids" data-step="1" aria-label="Add child">+</button></div>
-      <label class="activities-select">Budget<select id="ideas-budget" aria-label="Budget"><option value="free">Free</option><option value="under100">Under $100</option><option value="any">Any budget</option></select></label>
+      <label class="activities-select">Budget<select id="ideas-budget" aria-label="Budget"><option value="free">Free</option><option value="under100">Under $100</option><option value="any">Any budget</option></select></label><label class="activities-select">Distance<select id="ideas-distance" aria-label="Maximum driving distance"><option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option><option value="30">30 km</option><option value="50">50 km</option></select></label>
       <div class="activities-env" role="group" aria-label="Activity environment"><button data-env="all">Both</button><button data-env="indoor">Indoor</button><button data-env="outdoor">Outdoor</button></div>
     </div>
     <div class="activities-tabs" role="tablist" aria-label="Recommendations sections"><button role="tab" data-kind="ideas">✨ Ideas</button><button role="tab" data-kind="events">🎟 Events</button><button role="tab" data-kind="movies">🎬 Movies</button></div>
@@ -41,13 +41,14 @@ window.ActivitiesPanel={
     mode:['couple','family','visits'].includes(savedControls.mode)?savedControls.mode:'family',
     budget:['free','under100','any'].includes(savedControls.budget)?savedControls.budget:'any',
     environment:['all','indoor','outdoor'].includes(savedControls.environment)?savedControls.environment:'all',
+    maxKm:[5,10,20,30,50].includes(Number(savedControls.maxKm))?Number(savedControls.maxKm):20,
     kind:'ideas',adults:2,kids:2,items:[],snapshot:null,
     page:0,error:'',busy:false,feedback:new Map(),photos:new Map(),modal:null
   };
   Object.assign(state,defaults[state.mode]);
   if(Number.isInteger(savedControls.adults))state.adults=Math.max(1,Math.min(8,savedControls.adults));
   if(Number.isInteger(savedControls.kids))state.kids=Math.max(0,Math.min(10,savedControls.kids));
-  const params=()=>({mode:state.mode,adults:state.adults,kids:state.kids,budget:state.budget,environment:state.environment});
+  const params=()=>({mode:state.mode,adults:state.adults,kids:state.kids,budget:state.budget,environment:state.environment,maxKm:state.maxKm});
   const persist=()=>{try{localStorage.setItem('family:activities:controls:v2',JSON.stringify(params()));}catch{}};
   const active=()=>root.isConnected&&isActive();
   function fit(){if(active())root.style.height=Math.max(310,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
@@ -61,11 +62,11 @@ window.ActivitiesPanel={
       const on=b.dataset.kind===state.kind;b.classList.toggle('selected',on);b.setAttribute('aria-selected',String(on));
     }
     q('#count-adults').textContent=state.adults;q('#count-kids').textContent=state.kids;
-    q('#ideas-budget').value=state.budget;
+    q('#ideas-budget').value=state.budget;q('#ideas-distance').value=String(state.maxKm);
     refresh.textContent=state.busy?'⏳ Checking…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':'↻ Find Movies';
     refresh.disabled=state.busy;
-    caption.textContent=state.kind==='ideas'?'📍 Max 20 km by road · Google Maps · Admission costs unverified':
-      state.kind==='events'?'🎟 Events today · Official source links · Max 20 km':
+    caption.textContent=state.kind==='ideas'?'📍 Selected '+state.maxKm+' km by road · Google Maps · Prices unverified':
+      state.kind==='events'?'🎟 Events today · Current verified radius 20 km · Official links':
       '🎬 Canadian releases this month · Showtimes must be verified';
     q('#ideas-clock').textContent=fmt();
   }
@@ -228,7 +229,7 @@ window.ActivitiesPanel={
     q('#ideas-next').disabled=state.page>=max-1||state.busy;
     const last=state.snapshot?.generatedAt;
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
-      ['adults','kids','budget','environment'].some(k=>state.snapshot.options[k]!==state[k]);
+      ['adults','kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
     meta.textContent=(last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
       (state.error&&arr.length?' · '+state.error:'');
   }
@@ -283,12 +284,14 @@ window.ActivitiesPanel={
     state[type]=Math.max(type==='adults'?1:0,Math.min(type==='adults'?8:10,state[type]+step));persist();render();
   },{signal});
   q('#ideas-budget').addEventListener('change',e=>{state.budget=e.target.value;persist();render();},{signal});
+  q('#ideas-distance').addEventListener('change',e=>{state.maxKm=Number(e.target.value);persist();render();},{signal});
   refresh.addEventListener('click',generate,{signal});
   q('#ideas-prev').addEventListener('click',()=>{state.page--;render();},{signal});
   q('#ideas-next').addEventListener('click',()=>{state.page++;render();},{signal});
   window.addEventListener('resize',render,{signal});
   window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();},{signal});
   cleanup=()=>{closeModal();ctrl.abort();};
+  window.ActivitiesPanel.resume=()=>{fit();const clock=q('#ideas-clock');if(clock)clock.textContent=fmt();};
   render();loadFeedback();load();
  }
 };
