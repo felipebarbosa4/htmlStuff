@@ -67,7 +67,7 @@ window.ActivitiesPanel={
     refresh.disabled=state.busy;
     caption.textContent=state.kind==='ideas'?'📍 Selected '+state.maxKm+' km by road · Google Maps · Prices unverified':
       state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
-      '🎬 TMDB · Canadian theatrical releases · Showtimes not verified';
+      '🎬 This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. · Showtimes not verified';
     caption.replaceChildren(document.createTextNode(caption.textContent));
     if(state.kind==='movies'){
       const logo=el('img','activities-tmdb-logo');
