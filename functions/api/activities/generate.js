@@ -151,7 +151,10 @@ async function selectWithAI(env,date,forecastSummary,earliest,blocked,options,co
     (options.nightMode?'It is night RIGHT NOW. Return only late-night indoor entertainment/cafes/dining types with verified-open venues; no parks or next-day advice. ':'')+
     'Never create names of venues, movie screenings, events, addresses, distances, ratings or opening hours. '+
     'Return valid JSON ONLY: {"categories":["park","museum"],"notes":{"park":{"bring":"short practical packing list","why":"short age-relevant reason"}}}. '+
-    'Provide a distinct, brief practical packing list and reason for every selected category.';
+    'Provide a distinct, brief practical packing list and reason for every selected category. '+
+    'IMPORTANT: Write the notes.bring and notes.why text entirely in natural Brazilian Portuguese (pt-BR). '+
+    'Keep category identifiers in English exactly as provided; do not translate JSON keys. '+
+    'Use natural expressions suitable for a family in Ottawa; be concise and do not invent venue-specific facts.';
   const input=instruction+'\nToday: '+date+' in America/Toronto; earliest departure '+earliest+
     ' minutes after midnight; blocked intervals '+JSON.stringify(blocked)+
     '\nForecast after the earliest departure: '+forecastSummary+
@@ -263,16 +266,16 @@ export async function onRequestPost(context) {
       const p=byId.get(id);if(!p)return null;
       const note=choice.notes[p.category]||{};
       const {score,penalty,...publicPlace}=p;
-      return {...publicPlace,...factsDisplay(facts.get(id),options.adults,options.kids),bring:typeof note.bring==='string'?note.bring.slice(0,100):'Water and weather-appropriate layers',
-        reason:typeof note.why==='string'?note.why.slice(0,140):'Family-friendly place nearby'};
+      return {...publicPlace,...factsDisplay(facts.get(id),options.adults,options.kids),bring:typeof note.bring==='string'?note.bring.slice(0,100):'Água e roupas adequadas ao clima',
+        reason:typeof note.why==='string'?note.why.slice(0,140):'Passeio para aproveitar em família'};
     }).filter(Boolean);
     const result={date:targetDate,generatedAt:new Date().toISOString(),provider:choice.provider,
-      items,coverage:items.length,timezone:ZONE,options:{...options,nightMode:night}};
+      items,coverage:items.length,timezone:ZONE,locale:'pt-BR',options:{...options,nightMode:night}};
     // Cache only place IDs, user-facing activity types and model-authored notes.
     // Never persist Google place names/addresses/ratings/hours/route data.
     const stored={date:targetDate,generatedAt:result.generatedAt,provider:choice.provider,
       items:items.map(({id,category,bring,reason})=>({id,category,bring,reason})),
-      timezone:ZONE,options};
+      timezone:ZONE,locale:'pt-BR',options};
     await env.ACTIVITIES_KV.put(keyFor(options.mode),JSON.stringify(stored),{expirationTtl:28*24*60*60});
     return json(result);
   }catch(e){return json({error:String(e?.message||'Generation failed').slice(0,220)},502);}
