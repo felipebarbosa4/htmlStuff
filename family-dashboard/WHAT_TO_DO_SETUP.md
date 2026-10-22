@@ -2,6 +2,22 @@
 
 Status: implementation lives on `feature/what-to-do-ai`. Do **not** merge until credentials, Cloudflare Access, quotas, and previews have been verified. This is an initial release, not proof that the external integrations are live.
 
+## Version 2 — scenarios, sourced events and movies (2026-10-21)
+
+This release is designed to go directly to the production `master` branch after local tests and Cloudflare Access verification, per the dashboard owner's request.
+
+- Three scenario buttons: **Couple** (2 adults by default, no children), **Family** (2 adults, 2 children), **Visits** (4 adults, 2 children). Users can adjust adults (1–8) and kids (0–10), plus select **Free / Under CAD 100 / Any budget** and **Both / Indoor / Outdoor**.
+- Three independent sections: **Ideas**, **Events Today**, **Movies This Month**. Each has its own explicit on-demand Refresh; no searches are initiated simply by opening the tab. The previous choices remain accessible via private KV.
+- Ideas: Google Places New + road distances from home (20 km maximum), weather from Open-Meteo, timed Google Calendar appointments but **ignore All day**, school days after 15:30 for groups with children, and return-home windows (Couple ~23:30, Visits ~21:30, Family ~20:00). Mode and category-specific Google queries; the GPT-6 Luna API prioritizes categories without receiving Google Maps content.
+- Events Today: GPT-6 Luna uses the OpenAI Responses API hosted **web_search** tool to retrieve dated event pages. Items must have a URL returned by the actual search, an event time not yet passed, and a specific real street address geocoded and independently verified within 20 km of home using Routes API. Unverified events are not shown. Links point to original sources. Ottawa Tourism calendar link is shown if no verifiable results.
+- Movies This Month: web search with explicit Canadian theatrical release dates in the current month. **Family and Visits** show only movies identified as **G or PG**, while Couple shows other ratings too. The source link is required, and screenings/showtimes/ticket prices are **never represented as verified**; cinemas need checking. Model-reported classifications should always be verified against official listings before taking children.
+- Budget is a **preference, not verified admission eligibility**. 'Free' restricts ordinary Ideas to parks and libraries, but fees for particular sites/events must still be checked. **Under CAD 100** cannot be guaranteed until official 2+2 or selected group admission prices become available; the UI clearly labels admission costs unverified. Don't introduce fabricated prices.
+- Learning uses `POST /api/activities/feedback` when users tap **Like / Not interested / Visited** on real venues. KV stores the latest 200 mode+place ID + category + feedback records, never personal names or Google Maps content. The system avoids disliked place IDs, favors likes and demotes visited places in subsequent refreshes. Only category feedback **counts** are sent to GPT-6 Luna.
+- KV keys: `family:activities:v2:family`, `:couple`, `:visits` (complete prefix `family:activities:v2:`), `family:activities:feedback:v1` and `family:activities:discovery:v1:events|movies:<mode>`. Saved Google place IDs are resolved afresh via Places and Routes on opening, following Google content restrictions.
+- OpenAI web_search calls are **additional billable tool uses**, independent of inexpensive Luna input/output tokens. Places Details / Routes calls also incur billing; budget alarms and API quotas remain important.
+- Production and preview `*.pages.dev` hostnames were checked anonymously on October 21 and both redirected to Cloudflare Access authentication. Do not disable that access policy; this protects paid endpoints.
+- No new environment variables needed: existing `OPENAI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `HOME_ADDRESS`, `ACTIVITIES_KV`, and read-only Calendar OAuth secrets suffice.
+
 ## 1. Security prerequisites (first!)
 
 1. In Cloudflare Zero Trust > Access > Applications, ensure the **production** Pages hostname and **every preview hostname** serving the dashboard are behind Cloudflare Access. Cover `/family-dashboard/*`, `/api/activities`, `/api/activities/*` and `/api/calendar`; protecting the full hostname is simplest.
@@ -68,7 +84,7 @@ Once a protected Preview deployment is available:
 3. Before the first refresh, you should see a placeholder with a manual Refresh Ideas button, **not automatically generated suggestions**.
 4. Click Refresh Ideas once. Confirm 4 cards on the first page, 4 on the second (when 8 destinations qualify), actual photos where available, valid routes, and that all displayed driving distances are <=20 km from home.
 5. Click a card. Verify links (Directions, Website, Google listing), packing advice, price **status**, and today's hours.
-6. Reopen What to Do: it must display the **previous saved selection**, without invoking OpenAI or Places **Text Search** again. The server resolves live Google Place Details and Routes on each tab open, and live photo metadata for visible cards. This costs additional Google Maps requests but avoids caching Google place content.
+6. Reopen a scenario's Ideas: it must display the **previous saved selection**, without invoking OpenAI or Places **Text Search** again. The server resolves live Google Place Details and Routes on each tab open, and live photo metadata for visible cards. This costs additional Google Maps requests but avoids caching Google place content.
 7. Try Refresh again within 90 seconds: should be throttled; the old list should remain visible.
 8. Temporarily disable a noncritical key in Preview and confirm the saved list is retained on failure.
 9. Check Google API quotas and Cloudflare logs for errors. Never log credentials, exact home address or private calendar titles.
@@ -79,9 +95,9 @@ Do **not** merge simply because the automated mock test passes. Only merge after
 
 ## Behavior and limitations
 
-- **Only Refresh Ideas calls AI and searches for new venues.** Opening the tab reads a saved list. Images may request fresh provider metadata when cards are shown.
+- **Only user-initiated Refresh actions invoke OpenAI**. Ideas searches venues; Events and Movies additionally use billable OpenAI web search with explicit source links. Opening a tab reads cached selections (and can rehydrate Google venue data and photos) without generating new recommendations.
 - Eight activities are targeted; fewer may be returned if fewer places qualify. Ranking blends AI input, road distance, opening hours, forecast and ratings.
-- The search presently focuses on **venues** (parks, indoor playgrounds, museums, pools, libraries, animal attractions); it does not yet integrate an official time-specific festival/event ticketing feed.
+- Ideas searches **venues**. The Events section researches same-day events on demand with source citations and Google-verified road distances; a dedicated contracted ticketing/showtimes feed is **not** integrated.
 - **Real family admission prices are not fetched** in this release. Each card says `Check admission price`, and the details link to the venue website when available. Google's price-level indicator is not a reliable family admission price.
 - The saved **selection** remains until Refresh or expires after **28 days**. On every opening, names, addresses, opening hours and road distances are refreshed from Google; if the saved date is no longer today or tomorrow, the time displays **Refresh Ideas for a current time**.
 - Driving distance is calculated from home via Routes API. The Directions link opens Google Maps, which may use the phone/tablet's current location as origin.
