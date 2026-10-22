@@ -9,6 +9,7 @@ import {onRequestPost as discover,onRequestGet as listedDiscovery} from '../func
 import {tmdbMovies} from '../functions/api/activities/providers.js';
 import {normalizeOptions,learnedCounts} from '../functions/api/activities/config.js';
 import {hoursForDate} from '../functions/api/activities/hours.js';
+import {sanitizeEnrichment,priceDisplay,factsDisplay,venueFacts} from '../functions/api/activities/enrich.js';
 
 test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo attribution and throttle', async()=>{
   const OriginalDate=global.Date;
@@ -72,10 +73,19 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     ]});
     if(uri==='https://api.openai.com/v1/responses') {
       assert.equal(JSON.parse(options.body).model,'gpt-6-luna');
-      assert.equal(JSON.parse(options.body).reasoning.effort,'none');
-      const input=JSON.parse(options.body).input;
-      assert.ok(!input.includes('Test Place'), 'Do not send Google Places data to AI');
+      const body=JSON.parse(options.body);
+      const input=body.input;
       assert.ok(!input.includes(env.HOME_ADDRESS), 'Do not send home address to AI');
+      if(body.tools?.some(x=>x.type==='web_search')){
+        const listed=JSON.parse(input.split('Venues: ')[1]);
+        const source='https://www.ottawa.ca/parks/admission';
+        return response({output:[{type:'web_search_call',action:{sources:[{url:source}]}},{type:'message',content:[{type:'output_text',
+          text:JSON.stringify({items:listed.map(x=>({id:x.id,sourceUrl:source,
+            highlights:['Play outdoors','Explore gardens'],animals:['goats'],why:'Explore this public place',
+            admission:{free:false,adultCAD:10,childCAD:5,evidence:'Adult C$10.00 Child C$5.00 admission'}}))})}]}]});
+      }
+      assert.equal(body.reasoning.effort,'none');
+      assert.ok(!input.includes('Test Place'), 'Do not send Google Places data to AI for category ranking');
       const categories=['park','indoor','museum','recreation','library','animals'];
       return response({output:[{type:'message',content:[{type:'output_text',
         text:JSON.stringify({categories,notes:Object.fromEntries(categories.map(cat=>[cat,{bring:'Water, jacket',why:'Fun for two kids'}]))})}]}]});
@@ -111,7 +121,9 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
       'Cache must not persist Google Maps content');
     assert.ok(new Set(data.items.map(x=>x.category)).size>=3,'variety must be enforced');
     assert.ok(!JSON.stringify(data).includes(env.HOME_ADDRESS));
-    assert.equal(calls.filter(x=>x==='https://api.openai.com/v1/responses').length,1);
+    assert.equal(calls.filter(x=>x==='https://api.openai.com/v1/responses').length,3,'AI ranking plus two uncached web searches');
+    assert.equal(generatedData.items[0].price.estimatedTotal,30);
+    assert.ok(generatedData.items[0].highlights.includes('Play outdoors'));
     const pref=await savePreference({request:new Request('https://dashboard.example.org/api/activities/feedback',{
       method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
       body:JSON.stringify({mode:'family',id:data.items[0].id,category:data.items[0].category,value:'visited'})
@@ -127,6 +139,17 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     assert.equal(hydrated.items.length,8);
     assert.ok(hydrated.items.every(x=>x.name && x.km<=20));
     assert.equal(calls.filter(x=>x==='https://api.openai.com/v1/responses').length,beforeAI,'GET must not invoke AI');
+    assert.equal(hydrated.items[0].price.perPerson,7.5,'Cached admission average can be rehydrated without AI');
+    const withoutKids=JSON.parse(values.get('family:activities:v2:family'));
+    withoutKids.options.kids=0;
+    await env.ACTIVITIES_KV.put('family:activities:v2:family',JSON.stringify(withoutKids));
+    const freshForAdults=await onRequestGet({env,request:new Request('https://dashboard.example.org/api/activities')});
+    const adultItems=(await freshForAdults.json()).items;
+    assert.equal(adultItems[0].bestTime,'Leave at 12:45 PM',
+      'Kids=No must use the current clock, not the 3:30 PM school restriction');
+    assert.equal(adultItems[0].price.perPerson,10);
+    assert.equal(calls.filter(x=>x==='https://api.openai.com/v1/responses').length,beforeAI,
+      'Changing group size and rehydrating cached prices must not trigger web research');
     assert.equal(calls.filter(x=>x==='https://places.googleapis.com/v1/places:searchText').length,beforeSearch,
       'GET must not generate new suggestions');
     const p=await photoGet({request:new Request('https://dashboard.example.org/api/activities/photo?placeId='+data.items[0].id),env});
@@ -400,4 +423,29 @@ test('TMDB returns truthful count when fewer than nine age-verified Canadian fil
     const items=await tmdbMovies({TMDB_API_KEY:'token'},{mode:'family',kids:2},{date:'2026-10-22'});
     assert.equal(items.length,1);
   }finally{global.fetch=oldFetch;}
+});
+
+test('venue price facts reject uncited claims and unsupported pricing evidence',()=>{
+  const url='https://ottawa.ca/en/recreation-and-parks/visiting';
+  const good={id:'abc',sourceUrl:url,highlights:['Playground','Waterfront path'],animals:['goats'],why:'Walk and play',
+    admission:{adultCAD:16,childCAD:8,free:false,evidence:'Adult C$16.00; Children C$8.00'}};
+  assert.equal(sanitizeEnrichment(good,new Set()),null,'No cited source means no published claims');
+  const verified=sanitizeEnrichment(good,new Set([url]));
+  assert.equal(verified.admission.type,'priced');
+  assert.equal(priceDisplay(verified,2,2).perPerson,12);
+  assert.equal(priceDisplay(verified,2,0).perPerson,16);
+  assert.equal(priceDisplay(verified,4,2).estimatedTotal,80);
+  const unproved=sanitizeEnrichment({...good,admission:{...good.admission,evidence:'See membership portal'}},new Set([url]));
+  assert.equal(unproved.admission.type,'unverified','Price must have matching evidence');
+  assert.equal(factsDisplay(unproved).price.perPerson,null);
+  assert.equal(sanitizeEnrichment({...good,sourceUrl:'http://example.com'},new Set([url])),null);
+  const free=sanitizeEnrichment({...good,admission:{free:true,evidence:'Free admission all year'}},new Set([url]));
+  assert.equal(free.admission.type,'free');
+  assert.equal(priceDisplay(free).perPerson,0);
+});
+test('Kids Yes/No overrides legacy family counts without changing adult defaults',()=>{
+  assert.equal(normalizeOptions({mode:'family',kidsYes:false,kids:2}).kids,0);
+  assert.equal(normalizeOptions({mode:'family',kidsYes:true,kids:0}).kids,2);
+  assert.equal(normalizeOptions({mode:'family',kidsYes:false}).adults,2);
+  assert.equal(normalizeOptions({mode:'visits',kidsYes:true}).adults,4);
 });
