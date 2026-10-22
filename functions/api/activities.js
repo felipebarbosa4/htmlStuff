@@ -3,6 +3,7 @@ import {originPoint,forecast,routes,openingLabel,scheduleFor} from './activities
 import {onRequestGet as calendarGet} from './calendar.js';
 import {keyFor,normalizeOptions} from './activities/config.js';
 import {hoursForDate} from './activities/hours.js';
+import {venueFacts,factsDisplay} from './activities/enrich.js';
 
 const placeMask='id,displayName,formattedAddress,businessStatus,currentOpeningHours,googleMapsUri,websiteUri,attributions';
 const MAPS='https://places.googleapis.com/v1/places/';
@@ -42,15 +43,16 @@ export async function onRequestGet(context) {
       try{weather=await forecast(home);}catch{}
     }
     const weekday=local(new Date(saved.date+'T12:00:00Z')).weekday;
-    const school=!['Sat','Sun'].includes(weekday);
+    const school=!['Sat','Sun'].includes(weekday) && (saved.options?.kids||0)>0;
     const night=Boolean(saved.options?.nightMode)&&saved.date===now.date;
-    const earliest=saved.date===now.date?Math.max(now.minute+15,night?0:school?930:540):school?930:540;
+    const earliest=saved.date===now.date?Math.max(now.minute+15,night?0:school?930:0):school?930:0;
+    const facts=await venueFacts(env,known,{research:false});
     const items=known.map((x,i)=>{
       const data=details[i],route=matrix.get(i);
       if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||route.km>(saved.options?.maxKm||MAX_KM))return null;
       const latest=night?1440:saved.options?.mode==='couple'?1410:saved.options?.mode==='visits'?1290:1200;
       const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather,latest,night):null;
-      const bestTime=slot?'Leave at '+hourText(slot.t):'Refresh Ideas to recheck availability';
+      const bestTime=slot?'Leave at '+hourText(slot.t):'No confirmed slot right now — Refresh Ideas';
       return {
         id:x.id,name:data.displayName.text,category:x.category||'Activity',
         bring:typeof x.bring==='string'?x.bring:'Water and weather-appropriate layers',
@@ -59,8 +61,8 @@ export async function onRequestGet(context) {
         driveMinutes:route.minutes,website:data.websiteUri||'',mapsUrl:data.googleMapsUri||'',
         openingHours:openingLabel(data),hoursToday:hoursForDate(data.currentOpeningHours,saved.date).label,
         hoursDate:saved.date,hoursVerified:Boolean(slot?.hoursVerified),
-        bestTime,weather:slot?.weather||'Check current forecast',
-        price:'Check admission price',
+        bestTime,departureMinute:slot?.t??null,weather:slot?.weather||'Check current forecast',
+        ...factsDisplay(facts.get(x.id),saved.options?.adults||2,saved.options?.kids||0),
         attributions:(data.attributions||[]).map(p=>({provider:p.provider||'',uri:p.providerUri||''}))
       };
     }).filter(Boolean);

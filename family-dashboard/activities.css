@@ -206,3 +206,20 @@
  .activities-trailer-note{font-size:10px!important;line-height:1.1!important}
  .activities-modal .activities-trailer-fallback{padding:3px 7px;font-size:11px}
 }
+
+/* Compact Kids yes/no picker and readable activity-specific context. */
+.activities-kids{display:flex;align-items:center;gap:5px;color:#cfe1f1;font-size:13px}
+.activities-kids>span{font-weight:800;margin-right:3px}
+.activities-kids button{min-width:52px;min-height:36px;padding:7px 10px;
+ background:#1d3752;border:1px solid #486b88;border-radius:10px;
+ color:#d5e8f8;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
+.activities-kids button.selected{background:#73eadb;border-color:#73eadb;color:#0a2b30}
+.activities-root:not(.activities-movies) .activities-description{justify-content:center;gap:3px}
+.activities-root:not(.activities-movies) .activities-line{font-size:clamp(11px,1.2vw,14px);line-height:1.15}
+.activities-idea-feature{font-weight:750;color:#eafaf9!important}
+.activities-idea-price{color:#80efe0!important;font-weight:750}
+.activities-root:not(.activities-movies) .activities-photo{width:clamp(115px,18vw,210px)}
+@media(max-height:700px){
+ .activities-root:not(.activities-movies) .activities-description{gap:1px}
+ .activities-root:not(.activities-movies) .activities-line{font-size:11px}
+}

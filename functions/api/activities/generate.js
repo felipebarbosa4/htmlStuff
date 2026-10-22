@@ -1,6 +1,7 @@
 import {ZONE,CACHE_KEY,MAX_KM,json,local,addDay,ranges,openDuring,outdoorWeather,hourText,getJSON} from './shared.js';
 import {onRequestGet as calendarGet} from '../calendar.js';
 import {hoursForDate} from './hours.js';
+import {venueFacts,factsDisplay} from './enrich.js';
 import {CATEGORY_SETS,OUTDOOR,FREE_CANDIDATES,FEEDBACK_KEY,normalizeOptions,keyFor,preferencesFrom,learnedCounts,validOrigin} from './config.js';
 
 // Explicit user action only: no scheduled generation, no AI on page load.
@@ -55,6 +56,11 @@ export function isNight(minutes) {return minutes>=20*60 || minutes<5*60;}
 export function eligibleNightCategory(category) {return ['indoor','food','culture','recreation'].includes(category);}
 async function findPlaces(key,origin,options,night=false) {
   const all=CATEGORY_SETS[options.mode];
+  const adultsOnly=options.mode==='family'&&options.kids===0;
+  const adultQueries={park:'scenic parks walks gardens Ottawa Ontario',indoor:'indoor entertainment bowling escape room Ottawa Ontario',
+    museum:'art history science exhibitions Ottawa Ontario',recreation:'recreation wellness swimming Ottawa Ontario',
+    library:'Ottawa library exhibitions cultural events',animals:'nature walking trails wildlife sanctuary Ottawa Ontario',
+    food:'best cafes dessert restaurant Ottawa Ontario',cinema:'cinema movies Ottawa Ontario'};
   const queries=all.filter(([cat])=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
     .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat))
     .filter(([cat])=>!night||eligibleNightCategory(cat));
@@ -68,7 +74,7 @@ async function findPlaces(key,origin,options,night=false) {
     const r=await getJSON('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
       headers:{'content-type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':fieldMask},
-      body:JSON.stringify({textQuery:nightQuery||query,languageCode:'en',pageSize:12,
+      body:JSON.stringify({textQuery:nightQuery||(adultsOnly?adultQueries[category]:query),languageCode:'en',pageSize:12,
         locationBias:{circle:{center:{latitude:origin.lat,longitude:origin.lng},radius:options.maxKm*1000}}})
     });
     return (r.places||[]).filter(p=>p.id&&p.location&&p.businessStatus!=='CLOSED_PERMANENTLY')
@@ -134,7 +140,7 @@ async function selectWithAI(env,date,forecastSummary,earliest,blocked,options,co
     .filter(cat=>!options.nightMode||eligibleNightCategory(cat));
   const scenario=options.mode==='couple'?'romantic couple date, adult conversation and fun':
     options.mode==='visits'?'show first-time visitors the memorable character of Ottawa, kid-friendly where needed':
-    'playful and educational family outing';
+    options.kids>0?'playful and educational family outing':'adult-friendly local outings without children';
   const instruction='You are an expert local outing planner for Ottawa, Ontario, Canada. '+
     'Choose an ORDERED list of up to six suitable categories ONLY from '+JSON.stringify(categories)+'. '+
     'Situation: '+scenario+'. Group: '+options.adults+' adults, '+options.kids+' children'+
@@ -183,7 +189,9 @@ export async function onRequestPost(context) {
     options.nightMode=night;
     const earliestFor=date=>{
       const day=local(new Date(date+'T12:00:00Z')).weekday;
-      const minimum=night?0:options.kids>0&&!['Sat','Sun'].includes(day)?930:540;
+      // Children cannot leave until school finishes on weekdays; when Kids=No,
+      // use the current clock instead of imposing the school schedule.
+      const minimum=night?0:options.kids>0&&!['Sat','Sun'].includes(day)?930:0;
       return date===now.date?Math.max(now.minute+15,minimum):minimum;
     };
     const agendaFor=async date=>{
@@ -212,12 +220,12 @@ export async function onRequestPost(context) {
         website:p.websiteUri||'',mapsUrl:p.googleMapsUri||'',
         openingHours:openingLabel(p),hoursToday:hoursForDate(p.currentOpeningHours,date).label,
         hoursDate:date,hoursVerified:schedule.hoursVerified,
-        bestTime:'Leave at '+hourText(schedule.t),weather:schedule.weather,
+        bestTime:'Leave at '+hourText(schedule.t),departureMinute:schedule.t,weather:schedule.weather,
         penalty:schedule.penalty,attributions:(p.attributions||[]).map(x=>({provider:x.provider||'',uri:x.providerUri||''})),
         score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};
     }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,26);
     let pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
-    if(!night && pool.length<3 && targetDate===now.date) {
+    if(!night && pool.length===0 && targetDate===now.date) {
       // If it is too late for a realistic outing, use tomorrow's free hours
       // without charging again for Places/Routes searches.
       const tomorrow=addDay(targetDate),tomorrowBusy=await agendaFor(tomorrow);
@@ -250,13 +258,13 @@ export async function onRequestPost(context) {
         ids.push(id);categoryCount.set(cat,count+1);
       }
     }
+    const facts=await venueFacts(env,ids.map(id=>byId.get(id)),{research:true});
     const items=ids.map(id=>{
       const p=byId.get(id);if(!p)return null;
       const note=choice.notes[p.category]||{};
       const {score,penalty,...publicPlace}=p;
-      return {...publicPlace,bring:typeof note.bring==='string'?note.bring.slice(0,100):'Water and weather-appropriate layers',
-        reason:typeof note.why==='string'?note.why.slice(0,140):'Family-friendly place nearby',
-        price:'Check admission price'};
+      return {...publicPlace,...factsDisplay(facts.get(id),options.adults,options.kids),bring:typeof note.bring==='string'?note.bring.slice(0,100):'Water and weather-appropriate layers',
+        reason:typeof note.why==='string'?note.why.slice(0,140):'Family-friendly place nearby'};
     }).filter(Boolean);
     const result={date:targetDate,generatedAt:new Date().toISOString(),provider:choice.provider,
       items,coverage:items.length,timezone:ZONE,options:{...options,nightMode:night}};
