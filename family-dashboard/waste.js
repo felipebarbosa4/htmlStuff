@@ -30,6 +30,14 @@ function isDone(date){try{return localStorage.getItem(DONE+date)==='yes';}catch{
 function setDone(date,done){try{if(done)localStorage.setItem(DONE+date,'yes');else localStorage.removeItem(DONE+date);}catch{}}
 function dateEvent(date){return state.events.find(e=>e.date===date)||null;}
 function nextEvent(){return state.events.find(e=>e.date>=day())||null;}
+function followingEvent(date){return state.events.find(e=>e.date>date)||null;}
+const NEXT_TYPE_LABELS={garbage:'Lixo comum',blue:'Azul',black:'Preta',green:'Verde',yard:'Jardim'};
+function nextCollectionLabel(event){
+ const next=followingEvent(event.date);
+ if(!next)return '';
+ const dateLabel=new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'UTC'}).format(new Date(next.date+'T12:00:00Z')).replace(/\.$/,'');
+ return 'Próxima: '+dateLabel+' · '+TYPE_ORDER.filter(t=>next.types.includes(t)).map(t=>NEXT_TYPE_LABELS[t]).join(' · ');
+}
 function dateLabel(value){const s=new Intl.DateTimeFormat('pt-BR',{timeZone:'UTC',weekday:'long',day:'numeric',month:'long'}).format(new Date(value+'T12:00:00Z'));return s[0].toUpperCase()+s.slice(1);}
 function hourMinute(p){return Number(p.hour)*60+Number(p.minute);}
 function slot(p){const n=hourMinute(p);if(dateEvent(day(1))&&!isDone(day(1))&&n>=1200)return {kind:'tomorrow',event:dateEvent(day(1))};if(dateEvent(day())&&!isDone(day())&&n>=525&&n<600)return {kind:'today',event:dateEvent(day())};return null;}
@@ -58,12 +66,13 @@ function mount(view,onComplete){
  if(!event){view.innerHTML='<div class="waste-loading"><h1>♻️ Coleta de lixo</h1><p>'+(state.loading?'Buscando o calendário oficial de Ottawa…':'Calendário indisponível no momento.')+'</p><a href="https://ottawa.ca/collectioncalendar" target="_blank" rel="noopener">Ver calendário oficial ↗</a></div>';return;}
  const done=isDone(event.date);
  const heading=active?.kind==='tomorrow'?'COLETA AMANHÃ':event.date===day()?'COLETA HOJE':'PRÓXIMA COLETA';
+ const nextHint=nextCollectionLabel(event);
  const cards=TYPE_ORDER.filter(t=>event.types.includes(t)).map(t=>{
  const c=DATA[t];return '<article class="waste-card waste-'+t+'" style="--bin-color:'+c.color+'"><div class="waste-card-head">'+icon(t)+'<div><div class="waste-tag">'+c.tag+'</div><h2>'+c.name+'</h2></div></div><ul>'+c.examples.map(x=>'<li>'+escapeHtml(x)+'</li>').join('')+'</ul><p class="waste-tip">'+escapeHtml(c.tip)+'</p></article>';
  }).join('');
  const from=state.checkedAt?new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(state.checkedAt)):'não sincronizado';
  const warning=state.error?'<span class="waste-warning">'+escapeHtml(state.error)+'</span>':'';
- view.innerHTML='<div class="waste-panel"><div class="waste-header"><div><div class="waste-eyebrow">♻️ '+heading+'</div><h1>'+dateLabel(event.date)+'</h1><p>Separe os materiais conforme a coleta de Ottawa.</p></div><div class="waste-date-status">'+(done?'✓ CONCLUÍDO':active?.kind==='today'?'COLOQUE PARA FORA':'OTTAWA: ATÉ 7H')+'</div></div><div class="waste-grid waste-count-'+event.types.length+'">'+cards+'</div><div class="waste-bottom"><button type="button" class="waste-done'+(done?' waste-done-active':'')+'">'+(done?'✓ Lixeiras já colocadas · desfazer':'✓ Já coloquei tudo para fora')+'</button><div class="waste-source">'+warning+'Atualizado: '+from+' · <a href="https://ottawa.ca/collectioncalendar" target="_blank" rel="noopener">Ottawa ↗</a> · <a href="https://www.circularmaterials.ca/resident-communities/ottawa/" target="_blank" rel="noopener">Reciclagem ↗</a></div></div></div>';
+ view.innerHTML='<div class="waste-panel"><div class="waste-header"><div><div class="waste-title-line"><div class="waste-eyebrow">♻️ '+heading+'</div>'+(nextHint?'<span class="waste-next" title="'+escapeHtml(nextHint)+'">'+escapeHtml(nextHint)+'</span>':'')+'</div><h1>'+dateLabel(event.date)+'</h1><p>Separe os materiais conforme a coleta de Ottawa.</p></div><div class="waste-date-status">'+(done?'✓ CONCLUÍDO':active?.kind==='today'?'COLOQUE PARA FORA':'OTTAWA: ATÉ 7H')+'</div></div><div class="waste-grid waste-count-'+event.types.length+'">'+cards+'</div><div class="waste-bottom"><button type="button" class="waste-done'+(done?' waste-done-active':'')+'">'+(done?'✓ Lixeiras já colocadas · desfazer':'✓ Já coloquei tudo para fora')+'</button><div class="waste-source">'+warning+'Atualizado: '+from+' · <a href="https://ottawa.ca/collectioncalendar" target="_blank" rel="noopener">Ottawa ↗</a> · <a href="https://www.circularmaterials.ca/resident-communities/ottawa/" target="_blank" rel="noopener">Reciclagem ↗</a></div></div></div>';
  view.querySelector('.waste-done')?.addEventListener('click',()=>{setDone(event.date,!isDone(event.date));renderView();if(onComplete && isDone(event.date))onComplete();});
  };
  renderView();const onUpdate=()=>renderView();window.addEventListener('waste-calendar-updated',onUpdate,{signal:(()=>{const c=new AbortController(); const observer=new MutationObserver(()=>{if(!view.isConnected){c.abort();observer.disconnect();}});observer.observe(document.body,{childList:true,subtree:true});return c.signal;})()});
