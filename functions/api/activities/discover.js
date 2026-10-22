@@ -5,7 +5,7 @@ import {originPoint} from './generate.js';
 // Events and film releases are researched from open web references, never
 // Google Places content. Each user-requested refresh incurs a web-search call.
 const CACHE_PREFIX='family:activities:discovery:v1:';
-const keyword=(kind,mode)=>CACHE_PREFIX+kind+':'+mode;
+const keyword=(kind,mode,maxKm=20)=>CACHE_PREFIX+kind+':'+mode+(kind==='events'?':'+maxKm+'km':'');
 function parsedResponse(data){
   const text=(data.output||[]).flatMap(x=>(x.content||[]).filter(y=>y.type==='output_text').map(y=>y.text)).join('\n')
     ||data.output_text||'';
@@ -33,7 +33,7 @@ async function research(env,kind,opts,day){
     ' minutes after midnight. Group '+opts.adults+' adults and '+opts.kids+' children. '+
     'Mode '+mode+' ('+(mode==='couple'?'adult-only romance/date':mode==='visits'?'visiting relatives and Ottawa sights':'family with children aged 8 and 5')+'). ';
   const instructions=kind==='events'?
-    'Find genuine SPECIAL EVENTS happening TODAY at a specific venue in Ottawa, within approximately 20 km of the northwest Ottawa/Kanata area (distance will be checked independently). '+
+    'Find genuine SPECIAL EVENTS happening TODAY at a specific venue in Ottawa, within approximately '+opts.maxKm+' km of the Ottawa Barrhaven area (distance will be checked independently). '+
     'Include festivals, free city events, community events, concerts, exhibits, popups, date nights, and kid-friendly events appropriate to the mode. '+
     'If it is late today, search tomorrow too, but indicate exact dates. '+
     'Check organizer pages such as ottawatourism.ca/en/event-calendar and ottawa.ca, and verify specific venue street addresses and start times. '+
@@ -82,7 +82,7 @@ async function research(env,kind,opts,day){
       address,sourceUrl:source,reason:String(item.why||'').slice(0,170)};
   }).filter(Boolean);
 }
-async function verifyEventDistances(env,items){
+async function verifyEventDistances(env,items,maxKm=20){
   if(!items.length)return [];
   const home=await originPoint(env);
   const geo=await Promise.all(items.slice(0,8).map(async e=>{
@@ -106,7 +106,7 @@ async function verifyEventDistances(env,items){
       'X-Goog-FieldMask':'originIndex,destinationIndex,condition,distanceMeters,duration'},
     body:JSON.stringify(body)});
   if(!Array.isArray(matrix))return [];
-  return matrix.filter(r=>r.condition==='ROUTE_EXISTS'&&Number(r.distanceMeters)<=20000)
+  return matrix.filter(r=>r.condition==='ROUTE_EXISTS'&&Number(r.distanceMeters)<=maxKm*1000)
     .map(r=>{
       const p=verified[r.destinationIndex];if(!p)return null;
       return {...p.event,km:Math.round(r.distanceMeters/100)/10,driveMinutes:Math.ceil(parseFloat(r.duration)/60)};
@@ -115,9 +115,10 @@ async function verifyEventDistances(env,items){
 export async function onRequestGet({request,env}){
   if(!env.ACTIVITIES_KV)return json({items:[],generatedAt:null});
   const u=new URL(request.url),kind=u.searchParams.get('kind')==='movies'?'movies':'events';
-  const mode=normalizeOptions({mode:u.searchParams.get('mode')}).mode;
+  const opts=normalizeOptions({mode:u.searchParams.get('mode'),maxKm:u.searchParams.get('maxKm')});
+  const mode=opts.mode;
   try{
-    const saved=await env.ACTIVITIES_KV.get(keyword(kind,mode),'json');
+    const saved=await env.ACTIVITIES_KV.get(keyword(kind,mode,opts.maxKm),'json');
     if(!saved)return json({items:[],kind,mode,generatedAt:null});
     const now=local();
     const items=(saved.items||[]).filter(x=>kind==='movies'?x.releaseDate?.startsWith(now.date.slice(0,7)):
@@ -131,16 +132,16 @@ export async function onRequestPost({request,env}){
   try{
     const input=await request.json(),kind=input.kind==='movies'?'movies':'events';
     const opts=normalizeOptions(input),now=local();
-    const key=keyword(kind,opts.mode),limit=key+':last-request';
+    const key=keyword(kind,opts.mode,opts.maxKm),limit=key+':last-request';
     const last=Number(await env.ACTIVITIES_KV.get(limit)||0);
     if(Date.now()-last<90000)return json({error:'Please wait before another discovery refresh'},429);
     await env.ACTIVITIES_KV.put(limit,String(Date.now()),{expirationTtl:120});
     let items=await research(env,kind,opts,now);
     if(kind==='events'){
       if(!env.GOOGLE_MAPS_API_KEY||!env.HOME_ADDRESS)throw Error('Maps integration required for event distance verification');
-      items=await verifyEventDistances(env,items);
+      items=await verifyEventDistances(env,items,opts.maxKm);
     }
-    const saved={kind,mode:opts.mode,generatedAt:new Date().toISOString(),
+    const saved={kind,mode:opts.mode,maxKm:opts.maxKm,generatedAt:new Date().toISOString(),
       month:now.date.slice(0,7),date:now.date,items,disclaimer:kind==='movies'?
         'Canada release dates, not confirmed local showtimes. Check cinemas before booking.':
         'Organizer times may change. Distance checked by road; verify the official event page.'};
