@@ -4,7 +4,10 @@ body:has(.waste-mount) #stage{min-height:0;overflow:hidden}
 .waste-mount{height:100%;max-height:calc(100dvh - 72px);padding:clamp(8px,1.35vh,14px) clamp(12px,2.4vw,30px);overflow:hidden}
 .waste-panel{height:100%;display:flex;flex-direction:column;gap:clamp(6px,1.3vh,13px);max-width:1500px;margin:auto}
 .waste-header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex:none}
-.waste-eyebrow{font-size:clamp(13px,1.8vw,18px);font-weight:900;letter-spacing:.12em;color:#8ee8d9}
+.waste-header>div:first-child{min-width:0;flex:1}
+.waste-title-line{display:flex;align-items:center;gap:clamp(8px,1.2vw,15px);min-width:0}
+.waste-next{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:clamp(10px,1.18vw,13px);font-weight:650;letter-spacing:0;color:#bfd4e2}
+.waste-eyebrow{white-space:nowrap;flex:none;font-size:clamp(13px,1.8vw,18px);font-weight:900;letter-spacing:.12em;color:#8ee8d9}
 .waste-header h1{margin:2px 0;font-size:clamp(25px,3vw,39px);line-height:1.15}
 .waste-header p{margin:3px 0;color:#c5d8e8;font-size:clamp(11px,1.35vw,15px)}
 .waste-date-status{border:1px solid #5c817d;background:#123a44;border-radius:30px;padding:10px 15px;font-weight:900;color:#9cecdc;white-space:nowrap;font-size:clamp(10px,1.2vw,14px)}
