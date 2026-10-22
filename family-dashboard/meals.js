@@ -51,7 +51,8 @@ function mount(view){
  // Re-render only while mounted, even if a previous API request resolves after leaving the panel.
  const controller=new AbortController();
  window.addEventListener('family-meals-updated',draw,{signal:controller.signal});
- const observer=new MutationObserver(()=>{if(!view.isConnected){controller.abort();observer.disconnect();}});
+ const poll=setInterval(()=>{if(view.isConnected)refresh(true);},60*1000);
+ const observer=new MutationObserver(()=>{if(!view.isConnected){clearInterval(poll);controller.abort();observer.disconnect();}});
  observer.observe(document.getElementById('stage'),{childList:true,subtree:true});
 }
 restore();
