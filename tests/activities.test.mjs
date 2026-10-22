@@ -7,6 +7,7 @@ import {ranges} from '../functions/api/activities/shared.js';
 import {onRequestPost as savePreference,onRequestGet as listPreferences} from '../functions/api/activities/feedback.js';
 import {onRequestPost as discover,onRequestGet as listedDiscovery} from '../functions/api/activities/discover.js';
 import {normalizeOptions,learnedCounts} from '../functions/api/activities/config.js';
+import {hoursForDate} from '../functions/api/activities/hours.js';
 
 test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo attribution and throttle', async()=>{
   const OriginalDate=global.Date;
@@ -198,6 +199,15 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
           {id:2,title:'Adult Film',poster_path:'/adult.jpg'},
           {id:3,title:'Unrated Film',poster_path:null}]});
       }
+      if(u.includes('/videos?')){
+        return response({results:[{site:'YouTube',type:'Trailer',official:true,key:'dQw4w9WgXcQ'}]});
+      }
+      if(u.includes('/watch/providers')){
+        return response({results:{CA:{link:'https://www.themoviedb.org/movie/1/watch?locale=CA',
+          flatrate:[{provider_id:8,provider_name:'Netflix',display_priority:1}],
+          rent:[{provider_id:10,provider_name:'Apple TV Store',display_priority:2}],
+          buy:[]}}});
+      }
       if(u.includes('/movie/')&&u.endsWith('/release_dates')){
         const id=Number(u.split('/')[5]);
         const cert=id===1?'PG':id===2?'14A':'';
@@ -215,6 +225,10 @@ test('TMDB uses Canadian theatrical releases and G/PG certification without Open
     assert.deepEqual(result.items.map(x=>x.name),['Family Film']);
     assert.equal(result.items[0].rating,'PG');
     assert.equal(result.items[0].posterUrl,'https://image.tmdb.org/t/p/w342/poster.jpg');
+    assert.equal(result.items[0].trailerUrl,'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    assert.deepEqual(result.items[0].watch.subscription,['Netflix']);
+    assert.deepEqual(result.items[0].watch.rent,['Apple TV Store']);
+    assert.equal(result.items[0].watch.verified,true);
     assert.equal(result.sourceCredit.url,'https://www.themoviedb.org/about/logos-attribution');
     const read=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
     assert.equal((await read.json()).items.length,1);
@@ -318,4 +332,20 @@ test('nighttime suggestions exclude parks and require confirmed open hours',()=>
   assert.equal(scheduleFor({category:'park',currentOpeningHours:opened.currentOpeningHours},8,date,22*60,[],forecast,1440,true),null);
   assert.equal(scheduleFor({category:'indoor'},8,date,22*60,[],forecast,1440,true),null,
     'Unknown opening hours must not count as definitely open');
+});
+
+test('date-specific opening hours respect split shifts, overnight hours and unverifiable dates',()=>{
+  const date='2026-10-22',point=(d,h,m=0)=>({date:{year:2026,month:10,day:Number(d)},hour:h,minute:m});
+  const hours={periods:[
+    {open:point(21,20),close:point(22,2)},
+    {open:point(22,9),close:point(22,12)},
+    {open:point(22,13),close:point(22,17)}
+  ]};
+  assert.equal(hoursForDate(hours,date,date).label,
+    '12:00 AM – 2:00 AM / 9:00 AM – 12:00 PM / 1:00 PM – 5:00 PM');
+  const closed=hoursForDate({periods:[]},date,date);
+  assert.match(closed.label,/Closed/);
+  assert.equal(hoursForDate(null,date,date).verified,false);
+  assert.equal(hoursForDate(hours,'2026-10-20',date).verified,false);
+  assert.equal(hoursForDate({periods:[{open:point(22,0)}]},date,date).label,'Open 24 hours');
 });

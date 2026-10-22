@@ -116,3 +116,9 @@
 .activities-credit-link{color:#7beedc;text-decoration:underline;display:inline-flex;vertical-align:middle;align-items:center;gap:5px}
 .activities-tmdb-logo{width:72px;height:15px;object-fit:contain;vertical-align:middle}
 .activities-footer>span:first-child{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+/* Date-specific opening periods and enriched Canadian film metadata. */
+.activities-trailer-link{color:#7deedc;text-decoration:underline;font-weight:800;font-size:clamp(12px,1.4vw,15px);align-self:flex-start}
+.activities-synopsis{color:#c7dced;font-size:clamp(12px,1.3vw,14px)}
+.activities-justwatch{display:inline-flex;margin-top:9px;font-size:12px;color:#91dfd7;text-decoration:underline}
+.activities-description .activities-line{line-height:1.25}
+@media(max-height:740px){.activities-description{padding:5px 10px;gap:1px}.activities-heading{line-height:1.1}}

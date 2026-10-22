@@ -4,6 +4,8 @@ const TZ='America/Toronto';
 const ICON={park:'🌳',indoor:'🤸',museum:'🏛️',recreation:'🏊',library:'📚',animals:'🐾',food:'🍽️',culture:'🎭',cinema:'🎬',landmark:'🏛️'};
 const URLSAFE=url=>{try{const u=new URL(url);return u.protocol==='https:'?u.href:'';}catch{return '';}};
 const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
+const dayLabel=s=> /^\d{4}-\d{2}-\d{2}$/.test(s||'')?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',month:'short',day:'numeric'}).format(new Date(s+'T12:00:00Z')):'Selected day';
+const watchNames=x=>(Array.isArray(x)?x:[]).join(', ');
 const stamp=s=>{const t=Date.parse(s);return Number.isFinite(t)?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(t):'Not generated'};
 const fmt=()=>{
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date());
@@ -77,6 +79,8 @@ window.ActivitiesPanel={
       a.className='activities-credit-link';a.textContent='';a.append(logo);
       a.title='This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.';
       caption.append(document.createTextNode(' · '),a);
+      const justwatch=link('Streaming data: JustWatch','https://www.justwatch.com/ca');
+      justwatch.className='activities-credit-link';caption.append(document.createTextNode(' · '),justwatch);
     }
     if(state.kind==='events'){
       const a=link('Has Things license','https://ottawa.hasthings.com/feeds#license');
@@ -150,12 +154,23 @@ window.ActivitiesPanel={
     panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
     panel.setAttribute('aria-label','Activity details');
     panel.append(el('h2','',(ICON[item.category]||'✨')+' '+item.name));
+    const watch=item.watch||{},streaming=watchNames(watch.subscription),free=watchNames(watch.free);
+    const where=!watch.verified?'Canadian streaming status not verified':
+      streaming||free?[
+        streaming?'Subscription: '+streaming:'',
+        free?'Free / ad-supported: '+free:'',
+        watchNames(watch.rent)?'Rent: '+watchNames(watch.rent):'',
+        watchNames(watch.buy)?'Buy: '+watchNames(watch.buy):''
+      ].filter(Boolean).join(' · '):
+      'No Canadian streaming providers listed (check back later)';
     const lines=item.kind==='movies'?[
       '🍿 Canadian theatrical release: '+item.releaseDate,
-      '🎫 Canadian / Ontario rating: '+item.rating,
-      '🕒 Showtimes at local cinemas: Not verified',
-      '✨ '+(item.reason||'See source for details'),
-      'ℹ TMDB data and posters: not endorsed or certified by TMDB.'
+      '🎫 Canadian rating: '+item.rating,
+      '📝 '+(item.synopsis||item.reason||'Synopsis not available'),
+      '📺 Watch in Canada: '+where,
+      '🕒 Local cinema showtimes: Not verified',
+      'ℹ Streaming information: JustWatch via TMDB; may change by date.',
+      'ℹ This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.'
     ]:item.kind==='events'?[
       '📆 '+item.date+' · '+item.time+' (Ottawa local time)',
       '📍 '+item.venue+' · '+item.address,
@@ -171,7 +186,8 @@ window.ActivitiesPanel={
       '🎒 Bring: '+item.bring,
       '✨ '+item.reason,
       '💰 Admission for your group: Not verified',
-      '⏰ Published hours: '+item.openingHours
+      '🏪 Hours for '+dayLabel(item.hoursDate)+': '+(item.hoursToday||'Opening hours unverified'),
+      '⏰ Weekly listing: '+item.openingHours
     ];
     lines.forEach(x=>panel.append(el('p','',x)));
     const actions=el('div','activities-modal-actions');
@@ -187,7 +203,11 @@ window.ActivitiesPanel={
     }else if(URLSAFE(item.sourceUrl)){
       actions.append(link(item.kind==='movies'?'🎬 TMDB details':'🔗 Event source',item.sourceUrl));
       if(item.kind==='events'&&URLSAFE(item.ticketUrl))actions.append(link('🎟 Tickets / organizer',item.ticketUrl));
-      if(item.kind==='movies')actions.append(link('🎟 Check Ottawa showtimes','https://www.tribute.ca/showtimes/movie/ontario/ottawa/'));
+      if(item.kind==='movies'){
+        if(URLSAFE(item.trailerUrl))actions.prepend(link('▶ Watch trailer',item.trailerUrl));
+        if(URLSAFE(item.watch?.link))actions.append(link('📺 Streaming options (CA)',item.watch.link));
+        actions.append(link('🎟 Check Ottawa showtimes','https://www.tribute.ca/showtimes/movie/ontario/ottawa/'));
+      }
     }
     if(item.kind==='ideas'){
       const note=el('p','activities-modal-tip','Help What to Do learn your preferences.');
@@ -200,6 +220,10 @@ window.ActivitiesPanel={
       panel.append(group);
       var status=el('p','activities-modal-tip','');
       panel.append(status);
+    }
+    if(item.kind==='movies'){
+      const by=link('Streaming availability supplied by JustWatch','https://www.justwatch.com/ca');
+      by.className='activities-justwatch';panel.append(by);
     }
     const close=el('button','activities-close','Close');close.type='button';
     close.addEventListener('click',closeModal,{signal});actions.append(close);
@@ -227,9 +251,17 @@ window.ActivitiesPanel={
       el('span','activities-type',item.kind==='movies'?item.rating:item.kind==='events'?'EVENT':item.category.toUpperCase()));
     content.append(heading);
     if(item.kind==='movies'){
-      content.append(el('div','activities-line','📅 Canada release: '+item.releaseDate),
-        el('div','activities-line','🎫 Rating: '+item.rating+' · Local showtimes not verified'),
-        el('div','activities-line',item.reason||'Open TMDB details'));
+      content.append(el('div','activities-line','📅 Canada release: '+item.releaseDate+' · '+item.rating));
+      const streaming=watchNames(item.watch?.subscription),free=watchNames(item.watch?.free);
+      content.append(el('div','activities-line',
+        streaming||free?'📺 Canada: '+[streaming,free].filter(Boolean).join(' / '):
+        '📺 '+(item.watch?.verified?'Not listed on Canadian streaming':'Streaming not verified')));
+      const trailer=URLSAFE(item.trailerUrl);
+      if(trailer){
+        const a=link('▶ Trailer ↗',trailer);a.className='activities-trailer-link';
+        a.addEventListener('click',e=>e.stopPropagation(),{signal});content.append(a);
+      }
+      content.append(el('div','activities-line activities-synopsis',item.synopsis||item.reason||'Synopsis unavailable'));
     }else if(item.kind==='events'){
       content.append(el('div','activities-line','📆 Today · '+item.time+' · '+item.venue),
         el('div','activities-line','📍 '+item.km+' km / '+item.driveMinutes+' min by car'),
@@ -237,6 +269,7 @@ window.ActivitiesPanel={
     }else{
       content.append(el('div','activities-line','🎒 '+item.bring),
         el('div','activities-line','🕒 '+item.bestTime+' · '+item.weather),
+        el('div','activities-line','🏪 '+dayLabel(item.hoursDate)+': '+(item.hoursToday||'Opening hours unverified')),
         el('div','activities-line','🚗 '+item.km+' km · '+item.driveMinutes+' min · '+(item.hoursVerified?'Hours checked':'Check hours')));
     }
     if(item.kind!=='ideas'&&URLSAFE(item.sourceUrl)){
