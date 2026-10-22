@@ -71,9 +71,9 @@ window.ActivitiesPanel={
     </div>
     <div class="activities-tabs" role="tablist" aria-label="Recommendations sections"><button role="tab" data-kind="ideas">✨ Ideas</button><button role="tab" data-kind="events">🎟 Events</button><button role="tab" data-kind="movies">🎬 Movies</button></div>
   </div>
-  <div class="activities-grid" id="ideas-grid" aria-live="polite"></div>
-  <div class="activities-footer"><span id="ideas-caption">📍 20 km by road · Google Maps</span><div class="activities-pages"><button id="ideas-prev" aria-label="Previous page">‹</button><span id="ideas-page">1 / 1</span><button id="ideas-next" aria-label="Next page">›</button></div></div>`;
-  const q=s=>root.querySelector(s),grid=q('#ideas-grid'),meta=q('#ideas-status'),refresh=q('#ideas-refresh');
+  <div class="activities-carousel" id="ideas-grid" tabindex="0" aria-label="Deslize horizontalmente para ver mais recomendações" aria-live="polite"><div class="activities-track" id="ideas-track"></div></div>
+  <div class="activities-footer"><span id="ideas-caption">📍 20 km by road · Google Maps</span><div class="activities-pages"><span id="ideas-page">Deslize ← → · 1 / 1</span></div></div>`;
+  const q=s=>root.querySelector(s),grid=q('#ideas-grid'),track=q('#ideas-track'),meta=q('#ideas-status'),refresh=q('#ideas-refresh');
   const pageLabel=q('#ideas-page'),caption=q('#ideas-caption');
   const state={
     mode:['couple','family','visits'].includes(savedControls.mode)?savedControls.mode:'family',
@@ -149,7 +149,7 @@ window.ActivitiesPanel={
     if(state.kind==='events'){
       const a=link('Ottawa Tourism events calendar','https://ottawatourism.ca/en/event-calendar');a.className='activities-source';box.append(a);
     }
-    grid.append(box);
+    track.firstElementChild?.append(box);
   }
   function link(title,url){
     const a=el('a','',title);a.href=URLSAFE(url)||'https://ottawatourism.ca/en/event-calendar';
@@ -398,28 +398,44 @@ window.ActivitiesPanel={
     }
     article.append(photo,content);return article;
   }
+  let renderedPages=1;
+  function updateScrollPage(){
+    if(!grid.clientWidth)return;
+    state.page=Math.max(0,Math.min(renderedPages-1,Math.round(grid.scrollLeft/grid.clientWidth)));
+    pageLabel.textContent='Deslize ← → · '+(state.page+1)+' / '+renderedPages;
+  }
   function render(){
     if(!active())return;
-    controls();fit();grid.replaceChildren();
+    controls();fit();track.replaceChildren();
     const arr=state.items,pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
     const columns=((state.kind==='movies'||state.kind==='ideas')&&window.innerWidth>=740&&
       (state.kind==='movies'||grid.getBoundingClientRect().height>=200))?2:1;
-    grid.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
     state.page=Math.max(0,Math.min(max-1,state.page));
-    const visibleItems=arr.slice(state.page*pageSizeNow,(state.page+1)*pageSizeNow);
-    // Previously the CSS always reserved FOUR rows even if we rendered just
-    // 1–2 cards, leaving empty rows and compressing the visible cards into
-    // very thin strips on Safari/iPad. Allocate rows only to visible cards.
-    const rows=state.kind==='movies'||state.kind==='ideas'?
-      Math.ceil(visibleItems.length/columns):Math.max(visibleItems.length,grid.getBoundingClientRect().height>=300?2:1);
-    grid.style.gridTemplateRows='repeat('+Math.max(1,rows)+',minmax(0,1fr))';
-    if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
-    else if(!arr.length)message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
-      'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
-    else visibleItems.forEach(i=>grid.append(card(i)));
-    pageLabel.textContent=(state.page+1)+' / '+max;
-    q('#ideas-prev').disabled=state.page===0||state.busy;
-    q('#ideas-next').disabled=state.page>=max-1||state.busy;
+    renderedPages=max;
+    if(state.busy||!arr.length){
+      const panel=el('div','activities-grid');
+      panel.style.gridTemplateColumns='minmax(0,1fr)';
+      panel.style.gridTemplateRows='minmax(0,1fr)';
+      track.append(panel);
+      if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
+      else message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
+        'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
+    }else{
+      for(let start=0;start<arr.length;start+=pageSizeNow){
+        const pageItems=arr.slice(start,start+pageSizeNow);
+        const panel=el('div','activities-grid');
+        panel.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
+        // Fit exactly the visible rows in this page: no blank, compressed rows.
+        const rows=state.kind==='movies'||state.kind==='ideas'?
+          Math.ceil(pageItems.length/columns):
+          Math.max(pageItems.length,grid.getBoundingClientRect().height>=300?2:1);
+        panel.style.gridTemplateRows='repeat('+Math.max(1,rows)+',minmax(0,1fr))';
+        pageItems.forEach(item=>panel.append(card(item)));
+        track.append(panel);
+      }
+    }
+    grid.scrollLeft=state.page*grid.clientWidth;
+    updateScrollPage();
     const last=state.snapshot?.generatedAt;
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
@@ -485,8 +501,12 @@ window.ActivitiesPanel={
     if(state.kind==='events')load(); else render();
   },{signal});
   refresh.addEventListener('click',generate,{signal});
-  q('#ideas-prev').addEventListener('click',()=>{state.page--;render();},{signal});
-  q('#ideas-next').addEventListener('click',()=>{state.page++;render();},{signal});
+  grid.addEventListener('scroll',updateScrollPage,{signal,passive:true});
+  grid.addEventListener('keydown',e=>{
+    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+    e.preventDefault();
+    grid.scrollBy({left:(e.key==='ArrowRight'?1:-1)*grid.clientWidth,behavior:'smooth'});
+  },{signal});
   window.addEventListener('resize',render,{signal});
   window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();},{signal});
   cleanup=()=>{closeModal();ctrl.abort();};
