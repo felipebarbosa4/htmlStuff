@@ -6,7 +6,7 @@ import {tmdbMovies,hasThingsEvents,movieCredit,eventCredit} from './providers.js
 // Only the optional events fallback invokes OpenAI web_search.
 // Movies exclusively use TMDB; normal events use the open Has Things feed.
 const CACHE_PREFIX='family:activities:discovery:v2:';
-const keyword=(kind,mode,maxKm=20)=>CACHE_PREFIX+kind+':'+mode+(kind==='events'?':'+maxKm+'km':'');
+const keyword=(kind,mode,maxKm=20)=>CACHE_PREFIX+(kind==='movies'?'tmdb-v3':'events')+':'+mode+(kind==='events'?':'+maxKm+'km':'');
 function parsedResponse(data){
   const text=(data.output||[]).flatMap(x=>(x.content||[]).filter(y=>y.type==='output_text').map(y=>y.text)).join('\n')
     ||data.output_text||'';

@@ -122,3 +122,10 @@
 .activities-justwatch{display:inline-flex;margin-top:9px;font-size:12px;color:#91dfd7;text-decoration:underline}
 .activities-description .activities-line{line-height:1.25}
 @media(max-height:740px){.activities-description{padding:5px 10px;gap:1px}.activities-heading{line-height:1.1}}
+
+/* Keep long movie descriptions and additional date-specific venue hours readable. */
+.activities-card-movie .activities-description{justify-content:center;gap:3px;padding:6px 10px}
+.activities-card-movie .activities-name{font-size:clamp(15px,1.7vw,19px)}
+.activities-card-movie .activities-line{font-size:clamp(11px,1.2vw,14px);line-height:1.2;flex-shrink:0}
+.activities-card-movie .activities-trailer-link{font-size:12px;line-height:1.1;flex-shrink:0}
+@media (max-height:820px) and (min-width:691px){.activities-grid{grid-template-rows:repeat(2,minmax(0,1fr))}}
