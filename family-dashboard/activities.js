@@ -55,10 +55,14 @@ window.ActivitiesPanel={
   const active=()=>root.isConnected&&isActive();
   function fit(){if(active())root.style.height=Math.max(0,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
   function pageSize(){
-    // The actual remaining grid height matters more than viewport dimensions:
-    // on iPads the browser toolbar and enlarged accessibility text may leave
-    // far less room than the CSS viewport dimensions imply.
     const available=grid.getBoundingClientRect().height;
+    // Movies are a compact two-column grid; reserve at least ~130px per row.
+    // A full tablet gets 4 films (2 x 2) or 6 (2 x 3) per page.
+    if(state.kind==='movies'){
+      const columns=window.innerWidth>=740?2:1;
+      const rows=available>=570?3:available>=280?2:1;
+      return columns*rows;
+    }
     if(available<270)return 1;
     if(available<550||window.innerWidth<690)return 2;
     return 4;
@@ -78,7 +82,7 @@ window.ActivitiesPanel={
     refresh.disabled=state.busy;
     caption.textContent=state.kind==='ideas'?'📍 Selected '+state.maxKm+' km by road · Google Maps · Prices unverified':
       state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
-      '🎬 This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. · Showtimes not verified';
+      '🎬 Canadian releases: this month + recent · This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.';
     caption.replaceChildren(document.createTextNode(caption.textContent));
     if(state.kind==='movies'){
       const logo=el('img','activities-tmdb-logo');
@@ -292,12 +296,14 @@ window.ActivitiesPanel={
     if(!active())return;
     controls();fit();grid.replaceChildren();
     const arr=state.items,pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
+    const movieColumns=state.kind==='movies'&&window.innerWidth>=740?2:1;
+    grid.style.gridTemplateColumns='repeat('+movieColumns+',minmax(0,1fr))';
     state.page=Math.max(0,Math.min(max-1,state.page));
     const visibleItems=arr.slice(state.page*pageSizeNow,(state.page+1)*pageSizeNow);
     // Previously the CSS always reserved FOUR rows even if we rendered just
     // 1–2 cards, leaving empty rows and compressing the visible cards into
     // very thin strips on Safari/iPad. Allocate rows only to visible cards.
-    grid.style.gridTemplateRows='repeat('+Math.max(1,visibleItems.length)+',minmax(0,1fr))';
+    grid.style.gridTemplateRows='repeat('+Math.max(1,state.kind==='movies'?Math.ceil(visibleItems.length/movieColumns):visibleItems.length)+',minmax(0,1fr))';
     if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
     else if(!arr.length)message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
       'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
@@ -309,6 +315,7 @@ window.ActivitiesPanel={
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['adults','kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
     meta.textContent=(last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
+      (state.kind==='movies'&&arr.length?' · '+arr.length+' verified movie'+(arr.length===1?'':'s')+(arr.length<9?' (fewer than 9 confirmed)':''):'')+
       (state.error&&arr.length?' · '+state.error:'');
   }
   async function load(){

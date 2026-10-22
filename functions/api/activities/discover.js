@@ -166,7 +166,7 @@ export async function onRequestPost({request,env}){
     const saved={kind,mode:opts.mode,maxKm:opts.maxKm,generatedAt:new Date().toISOString(),
       month:now.date.slice(0,7),date:now.date,items,sourceCredit:kind==='movies'?movieCredit:eventCredit,
       fallbackUsed,disclaimer:kind==='movies'?
-        'TMDB Canada theatrical dates and ratings; local showtimes not verified. TMDB does not endorse this app.':
+        'TMDB Canada theatrical releases: prioritize this month, include recent months if needed to offer up to 12. Local showtimes not verified. TMDB does not endorse this app.':
         'Data: Has Things (ODbL 1.0). Other events may come from cited OpenAI web search. Recheck organizers and child suitability.'};
     await env.ACTIVITIES_KV.put(key,JSON.stringify(saved),{expirationTtl:kind==='movies'?35*86400:2*86400});
     return json(saved);
