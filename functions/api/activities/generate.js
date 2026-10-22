@@ -1,5 +1,6 @@
 import {ZONE,CACHE_KEY,MAX_KM,json,local,addDay,ranges,openDuring,outdoorWeather,hourText,getJSON} from './shared.js';
 import {onRequestGet as calendarGet} from '../calendar.js';
+import {hoursForDate} from './hours.js';
 import {CATEGORY_SETS,OUTDOOR,FREE_CANDIDATES,FEEDBACK_KEY,normalizeOptions,keyFor,preferencesFrom,learnedCounts,validOrigin} from './config.js';
 
 // Explicit user action only: no scheduled generation, no AI on page load.
@@ -209,7 +210,8 @@ export async function onRequestPost(context) {
         address:p.formattedAddress||'',km:Math.round(route.km*10)/10,driveMinutes:route.minutes,
         rating:Number(p.rating)||null,reviewCount:Number(p.userRatingCount)||0,
         website:p.websiteUri||'',mapsUrl:p.googleMapsUri||'',
-        openingHours:openingLabel(p),hoursVerified:schedule.hoursVerified,
+        openingHours:openingLabel(p),hoursToday:hoursForDate(p.currentOpeningHours,date).label,
+        hoursDate:date,hoursVerified:schedule.hoursVerified,
         bestTime:'Leave at '+hourText(schedule.t),weather:schedule.weather,
         penalty:schedule.penalty,attributions:(p.attributions||[]).map(x=>({provider:x.provider||'',uri:x.providerUri||''})),
         score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};

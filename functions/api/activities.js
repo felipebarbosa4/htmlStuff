@@ -2,6 +2,7 @@ import {CACHE_KEY,MAX_KM,json,local,addDay,ranges,hourText,getJSON} from './acti
 import {originPoint,forecast,routes,openingLabel,scheduleFor} from './activities/generate.js';
 import {onRequestGet as calendarGet} from './calendar.js';
 import {keyFor,normalizeOptions} from './activities/config.js';
+import {hoursForDate} from './activities/hours.js';
 
 const placeMask='id,displayName,formattedAddress,businessStatus,currentOpeningHours,googleMapsUri,websiteUri,attributions';
 const MAPS='https://places.googleapis.com/v1/places/';
@@ -56,7 +57,8 @@ export async function onRequestGet(context) {
         reason:typeof x.reason==='string'?x.reason:'Family-friendly experience',
         address:data.formattedAddress||'',km:Math.round(route.km*10)/10,
         driveMinutes:route.minutes,website:data.websiteUri||'',mapsUrl:data.googleMapsUri||'',
-        openingHours:openingLabel(data),hoursVerified:Boolean(slot?.hoursVerified),
+        openingHours:openingLabel(data),hoursToday:hoursForDate(data.currentOpeningHours,saved.date).label,
+        hoursDate:saved.date,hoursVerified:Boolean(slot?.hoursVerified),
         bestTime,weather:slot?.weather||'Check current forecast',
         price:'Check admission price',
         attributions:(data.attributions||[]).map(p=>({provider:p.provider||'',uri:p.providerUri||''}))

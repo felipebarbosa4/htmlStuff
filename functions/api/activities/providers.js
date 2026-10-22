@@ -11,6 +11,37 @@ const monthEnd=month=>new Date(Date.parse((()=>{let [y,m]=month.split('-').map(N
 const family=opts=>opts.kids>0&&opts.mode!=='couple';
 const auth=token=>({Authorization:'Bearer '+token,accept:'application/json'});
 const photoPath=p=>/^\/[A-Za-z0-9_-]+\.(?:jpg|png|webp)$/.test(p||'')?p:'';
+const providerList=values=>[...new Map((Array.isArray(values)?values:[])
+  .filter(x=>typeof x.provider_name==='string'&&Number.isInteger(x.provider_id))
+  .sort((a,b)=>(a.display_priority||999)-(b.display_priority||999))
+  .map(x=>[x.provider_id,String(x.provider_name).slice(0,45)])).values()].slice(0,5);
+const videoLink=data=>{
+  const list=Array.isArray(data?.results)?data.results:[];
+  const valid=list.filter(x=>x.site==='YouTube'&&x.type==='Trailer'&&
+    /^[A-Za-z0-9_-]{11}$/.test(x.key||''));
+  valid.sort((a,b)=>Number(Boolean(b.official))-Number(Boolean(a.official))||
+    Number(b.iso_639_1==='en')-Number(a.iso_639_1==='en'));
+  return valid.length?'https://www.youtube.com/watch?v='+valid[0].key:'';
+};
+async function movieExtras(id,key){
+  const [videos,providers]=await Promise.allSettled([
+    getJSON(TMDB+'/movie/'+id+'/videos?language=en-US',{headers:auth(key)}),
+    getJSON(TMDB+'/movie/'+id+'/watch/providers',{headers:auth(key)})
+  ]);
+  const ca=providers.status==='fulfilled'?providers.value.results?.CA:null;
+  return {
+    trailerUrl:videos.status==='fulfilled'?videoLink(videos.value):'',
+    watch:{
+      verified:providers.status==='fulfilled',
+      subscription:providerList(ca?.flatrate),
+      free:providerList([...(ca?.free||[]),...(ca?.ads||[])]),
+      rent:providerList(ca?.rent),
+      buy:providerList(ca?.buy),
+      link:ca?.link&&/^https:\/\//.test(ca.link)?ca.link:''
+    }
+  };
+}
+
 
 export async function tmdbMovies(env,opts,now){
   const key=String(env.TMDB_API_KEY||'').trim();
@@ -39,13 +70,20 @@ export async function tmdbMovies(env,opts,now){
       return {id:'tmdb:'+m.id,kind:'movies',name:String(m.title||m.original_title||'').slice(0,105),
         releaseDate:theatrical[0].release_date.slice(0,10),
         rating:certs[0]||'Unverified',
-        reason:String(m.overview||'Canadian theatrical release').slice(0,160),
+        reason:String(m.overview||'Canadian theatrical release').slice(0,550),
         sourceUrl:'https://www.themoviedb.org/movie/'+m.id,
         posterUrl:poster?'https://image.tmdb.org/t/p/w342'+poster:'',
         provider:'TMDB'};
     }catch{return null;}
   }));
-  return results.filter(Boolean).sort((a,b)=>a.releaseDate.localeCompare(b.releaseDate)).slice(0,12);
+  const selected=results.filter(Boolean).sort((a,b)=>a.releaseDate.localeCompare(b.releaseDate)).slice(0,12);
+  // Enrich ONLY retained movies to avoid an unnecessary 2x fanout for discarded titles.
+  return Promise.all(selected.map(async movie=>{
+    try{
+      const extras=await movieExtras(Number(movie.id.slice(5)),key);
+      return {...movie, ...extras, synopsis:movie.reason, reason:movie.reason.slice(0,115)};
+    }catch{return {...movie,trailerUrl:'',watch:{verified:false,subscription:[],free:[],rent:[],buy:[],link:''},synopsis:movie.reason};}
+  }));
 }
 
 async function eventsFor(date){
