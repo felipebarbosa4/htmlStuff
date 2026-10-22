@@ -53,11 +53,20 @@ window.ActivitiesPanel={
   const params=()=>({mode:state.mode,adults:state.adults,kids:state.kids,budget:state.budget,environment:state.environment,maxKm:state.maxKm});
   const persist=()=>{try{localStorage.setItem('family:activities:controls:v2',JSON.stringify(params()));}catch{}};
   const active=()=>root.isConnected&&isActive();
-  function fit(){if(active())root.style.height=Math.max(310,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
-  function pageSize(){return (window.innerWidth<690||window.innerHeight<820)?2:4;}
+  function fit(){if(active())root.style.height=Math.max(0,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
+  function pageSize(){
+    // The actual remaining grid height matters more than viewport dimensions:
+    // on iPads the browser toolbar and enlarged accessibility text may leave
+    // far less room than the CSS viewport dimensions imply.
+    const available=grid.getBoundingClientRect().height;
+    if(available<270)return 1;
+    if(available<550||window.innerWidth<690)return 2;
+    return 4;
+  }
   function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode):
     '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+'&maxKm='+state.maxKm;}
   function controls(){
+    root.classList.toggle('activities-movies',state.kind==='movies');
     for(const b of root.querySelectorAll('[data-mode-choice]'))b.classList.toggle('selected',b.dataset.modeChoice===state.mode);
     for(const b of root.querySelectorAll('[data-env]'))b.classList.toggle('selected',b.dataset.env===state.environment);
     for(const b of root.querySelectorAll('[data-kind]')){
@@ -284,10 +293,15 @@ window.ActivitiesPanel={
     controls();fit();grid.replaceChildren();
     const arr=state.items,pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
     state.page=Math.max(0,Math.min(max-1,state.page));
+    const visibleItems=arr.slice(state.page*pageSizeNow,(state.page+1)*pageSizeNow);
+    // Previously the CSS always reserved FOUR rows even if we rendered just
+    // 1–2 cards, leaving empty rows and compressing the visible cards into
+    // very thin strips on Safari/iPad. Allocate rows only to visible cards.
+    grid.style.gridTemplateRows='repeat('+Math.max(1,visibleItems.length)+',minmax(0,1fr))';
     if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
     else if(!arr.length)message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
       'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
-    else arr.slice(state.page*pageSizeNow,(state.page+1)*pageSizeNow).forEach(i=>grid.append(card(i)));
+    else visibleItems.forEach(i=>grid.append(card(i)));
     pageLabel.textContent=(state.page+1)+' / '+max;
     q('#ideas-prev').disabled=state.page===0||state.busy;
     q('#ideas-next').disabled=state.page>=max-1||state.busy;

@@ -162,3 +162,11 @@ Official references:
 - On refresh, the first 12 verified Canadian theatrical releases are enriched with videos and watch providers, each of which may be unavailable. Additional requests are made only for movies already selected after Canadian release-date validation. No OpenAI model or web-search calls for Movies.
 - The old saved movie cards can lack the new information until a user presses **Find Movies** again. The app does not auto-generate new ideas, events, or movie selections when reopening the tab.
 - For safety, the UI uses link text to identify external provider sites and retains TMDB branding and JustWatch attribution.
+
+## October 22 — compact movie cards on iPhone landscape
+
+- Fix for narrow horizontal strips when Movies has fewer visible cards than the fixed four CSS grid tracks. `render()` now sets the grid row count to exactly the number of cards on the current page.
+- Page size responds to **actual available grid height**, not just `window.innerHeight`, so a short iOS landscape viewport shows one properly sized card instead of multiple unreadable strips. Larger tablets show two/four cards when they fit.
+- In landscape viewports with height <=500 CSS px, hide only the Movies budget/distance/indoor form because those settings do not affect movie releases; keep mode selection and Movies/Ideas/Events tabs. The full form remains visible on Ideas and Events.
+- Compact the global dashboard header in short landscape viewports and remove the fixed 310px minimum from Activities `fit()` to avoid unintended page scrolling.
+- Verified via headless Chromium with a mocked TMDB movie poster, trailer and Canadian streaming data at 852x393, 874x393, 932x430, 1024x768, 1180x860, and 1806x827 CSS viewports: visible cards >=120px tall, no clipping, no page scrolling; Ideas filters remain accessible.
