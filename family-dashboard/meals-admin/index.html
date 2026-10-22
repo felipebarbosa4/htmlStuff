@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1627">
+<title>Gerenciar refeições · Family Dash</title>
+<link rel="stylesheet" href="/family-dashboard/meals-admin/admin.css?v=1">
+<script src="/family-dashboard/meals-admin/admin.js?v=1" defer></script>
+</head>
+<body>
+<header class="admin-head"><div><a href="/family-dashboard/" class="back">← Voltar ao Family Dash</a><h1>🍲 Refeições da família</h1><p>Cadastre no computador. As mudanças aparecem automaticamente no tablet.</p></div><a href="/family-dashboard/meals/credits.html" target="_blank" rel="noopener" class="attribution">Créditos das fotos ↗</a></header>
+<main>
+<section class="editor">
+<h2 id="editor-title">Adicionar refeição</h2>
+<form id="meal-form">
+<label>Nome da refeição <input id="meal-name" name="name" maxlength="90" placeholder="Ex.: Arroz, feijão e frango" required></label>
+<label>Ingredientes (um por linha) <textarea id="meal-ingredients" name="ingredients" rows="6" placeholder="Arroz&#10;Feijão&#10;Frango&#10;Tomate" required></textarea></label>
+<label>Descrição curta <textarea id="meal-description" name="description" rows="2" maxlength="240" placeholder="Como vocês fazem em casa?"></textarea></label>
+<label>Tempo aproximado (minutos) <input id="meal-minutes" name="minutes" type="number" min="5" max="180" value="30"></label>
+<label>Foto da refeição (JPEG, PNG ou WebP)
+<input id="meal-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp">
+<span class="help">A foto será otimizada para o tablet antes de salvar.</span></label>
+<div id="photo-preview" class="photo-preview"><span>🍽️ Foto opcional</span></div>
+<button type="button" id="remove-photo" class="secondary">Remover foto</button>
+<div class="form-buttons"><button type="submit" id="save">Salvar refeição</button><button type="button" class="secondary" id="cancel">Limpar / cancelar</button></div>
+<div id="status" role="status" aria-live="polite"></div>
+</form>
+</section>
+<section class="library"><div class="library-head"><div><h2>Cardápio cadastrado</h2><p id="count">Carregando…</p></div><button id="reload" class="secondary">↻ Atualizar</button></div><input type="search" id="filter" placeholder="Buscar arroz, frango, macarrão, feijão…" aria-label="Buscar refeições"><div id="meals-list" class="library-list"></div></section>
+</main>
+<footer>🔐 Cadastro protegido pelo mesmo acesso do Family Dash · As fotos adicionadas são compartilhadas com o tablet · Sem uso da OpenAI API.</footer>
+</body></html>
