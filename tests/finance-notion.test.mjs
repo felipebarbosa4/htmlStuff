@@ -12,7 +12,7 @@ const snapshot={
   {id:'synthetic-transfer',kind:'transfer',amount:12,date:'2026-10-02',title:'Test transfer'}
  ]};
 class KV{
- async get(key,type){assert.equal(key,'finance:notion:snapshot:v1');assert.equal(type,'json');return snapshot;}
+ async get(key,type){assert.ok(['finance:notion:snapshot:v1','finance:notion:sync-status:v1'].includes(key));assert.equal(type,'json');return key==='finance:notion:snapshot:v1'?snapshot:null;}
 }
 const env={FINANCE_PIN:'000000',FINANCE_SESSION_SECRET:'finance-notion-test-'.repeat(3),FINANCE_KV:new KV()};
 const req=cookie=>new Request(ORIGIN+'/api/finance/notion',{headers:{...(cookie?{cookie}:{})}});

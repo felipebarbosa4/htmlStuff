@@ -191,13 +191,33 @@ window.FinancePanel=(()=>{
  function snapshotStatus(){
   if(!notion)return 'O histórico do Notion ainda não foi importado para esta tela.';
   const stamp=notion.fetchedAt?new Date(notion.fetchedAt).toLocaleString('pt-BR',{timeZone:'America/Toronto'}):'data não disponível';
-  return 'Importação do Notion: '+stamp+'. Cópia histórica, não sincronização automática.';
+  if(notion.syncStatus?.ok===false)return 'Falha na última sincronização. Dados anteriores preservados. Última cópia: '+stamp+'.';
+  if(notion.source==='notion-api')return 'Sincronizado com Notion: '+stamp+'. Atualização automática a cada 30 minutos.';
+  return 'Importação inicial: '+stamp+'. Use Sincronizar agora para atualizar do Notion.';
+ }
+ async function refreshNotion(button){
+  if(!unlocked)return;
+  button.disabled=true;button.textContent='Sincronizando...';
+  const status=el('span','finance-refresh-message','Lendo dados diretamente do Notion...');
+  button.after(status);touch();
+  try{
+   await api('sync',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+   const fresh=await api('notion');
+   if(!unlocked||!view?.isConnected||!within())return;
+   notion=fresh;page=0;renderContent();
+  }catch(e){status.textContent=e.message||'Erro de sincronização.';}
+  finally{button.disabled=false;button.textContent='↻ Sincronizar agora';}
+ }
+ function refreshButton(){
+  const button=el('button','finance-refresh','↻ Sincronizar agora');
+  button.type='button';button.addEventListener('click',()=>refreshNotion(button));
+  return button;
  }
  function renderHistory(){
   const content=view.querySelector('#finance-content');
   const header=el('div','finance-section-header'),intro=el('div');
   intro.append(el('h2','','Movimentos do Notion'),el('p','','Despesas, entradas e transferências · sem confundir com gastos fixos'));
-  header.append(intro);content.append(header);
+  header.append(intro,refreshButton());content.append(header);
   if(!notion?.items?.length){content.append(el('p','finance-empty','Nenhum movimento do Notion disponível.'));return;}
   const months=[...new Set(notion.items.filter(x=>/^\d{4}-\d{2}/.test(x.date||'')).map(x=>x.date.slice(0,7)))].sort().reverse();
   if(!months.includes(selectedMonth))selectedMonth=months[0]||'';
@@ -253,7 +273,7 @@ window.FinancePanel=(()=>{
   const content=view.querySelector('#finance-content');
   const header=el('div','finance-section-header'),intro=el('div');
   intro.append(el('h2','','Últimos extratos'),el('p','','Datas de fechamento diferentes · não são saldos bancários atuais'));
-  header.append(intro);content.append(header);
+  header.append(intro,refreshButton());content.append(header);
   if(!notion?.statementBalances?.length){content.append(el('p','finance-empty','Ainda não há extratos importados.'));return;}
   const grid=el('div','finance-balances');
   for(const balance of notion.statementBalances){

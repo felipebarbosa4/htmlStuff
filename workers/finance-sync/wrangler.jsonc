@@ -1,0 +1,9 @@
+{
+ "$schema":"node_modules/wrangler/config-schema.json",
+ "name":"family-finance-notion-sync",
+ "main":"index.js",
+ "compatibility_date":"2026-10-21",
+ "workers_dev":false,
+ "triggers":{"crons":["*/30 * * * *"]},
+ "kv_namespaces":[{"binding":"FINANCE_KV","id":"7af58bf9134141c6b126427f3f44d773"}]
+}
