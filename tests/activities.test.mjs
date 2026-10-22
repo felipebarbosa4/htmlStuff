@@ -176,42 +176,112 @@ test('new mode inputs constrain party, environment and spending preference',()=>
     {mode:'visits',adults:8,kids:0,environment:'outdoor',budget:'free',maxKm:20});
   assert.equal(learnedCounts([{mode:'family',category:'park',value:'like'}, {mode:'couple',category:'park',value:'dislike'}],'family').park.liked,1);
 });
-test('event/movie web research rejects uncited data and unsafe sources',async()=>{
-  const oldFetch=global.fetch;
-  const memory=new Map(),access=[],originalDate=global.Date;
-  const date=originalDate.parse('2026-10-21T15:00:00Z');
-  global.Date=class extends originalDate{constructor(...x){super(...(x.length?x:[date]));}static now(){return date;}};
-  const env={OPENAI_API_KEY:'fake',HOME_ADDRESS:'TEST ADDRESS',GOOGLE_MAPS_API_KEY:'fake',
-    ACTIVITIES_KV:{get:async(k,format)=>format==='json'&&memory.get(k)?JSON.parse(memory.get(k)):memory.get(k)||null,put:async(k,v)=>memory.set(k,v)}};
-  const response=obj=>new Response(JSON.stringify(obj),{headers:{'content-type':'application/json'}});
+test('TMDB uses Canadian theatrical releases and G/PG certification without OpenAI',async()=>{
+  const oldFetch=global.fetch,OriginalDate=global.Date,calls=[],cache=new Map();
+  const date=OriginalDate.parse('2026-10-21T15:00:00Z');
+  global.Date=class extends OriginalDate{constructor(...x){super(...(x.length?x:[date]));}static now(){return date;}};
+  const env={TMDB_API_KEY:'fake-tmdb-read-access-token',ACTIVITIES_KV:{
+    get:async(k,fmt)=>fmt==='json'&&cache.get(k)?JSON.parse(cache.get(k)):cache.get(k)||null,
+    put:async(k,v)=>cache.set(k,v)}};
+  const response=x=>new Response(JSON.stringify(x),{headers:{'content-type':'application/json'}});
   try{
     global.fetch=async(url,options={})=>{
-      access.push(String(url));
-      if(String(url).includes('/v1/responses')){
-        const isMovies=JSON.parse(options.body).input.includes('CANADIAN THEATRICAL');
-        const source='https://example.org/film-release';
-        const doc=isMovies?{items:[{title:'Family Film',releaseDate:'2026-10-09',rating:'G',sourceUrl:source,why:'Suitable for kids'},
-          {title:'Adult Film',releaseDate:'2026-10-09',rating:'14A',sourceUrl:source,why:'Not for young kids'},
-          {title:'Unverified Film',releaseDate:'2026-10-09',rating:'PG',sourceUrl:'http://evil.example',why:'Not source backed'}]}:{items:[]};
-        return response({output:[{type:'web_search_call',action:{sources:[{url:source}]}},
-          {type:'message',content:[{type:'output_text',text:JSON.stringify(doc)}]}]});
+      const u=String(url);calls.push(u);
+      assert.ok(!u.includes('api.openai.com'),'Movies must not invoke OpenAI');
+      assert.equal(options.headers?.Authorization,'Bearer fake-tmdb-read-access-token');
+      if(u.includes('/discover/movie')) {
+        const p=new URL(u);
+        assert.equal(p.searchParams.get('region'),'CA');
+        assert.equal(p.searchParams.get('release_date.gte'),'2026-10-01');
+        assert.equal(p.searchParams.get('with_release_type'),'3|2');
+        return response({results:[{id:1,title:'Family Film',poster_path:'/poster.jpg',overview:'Family adventure'},
+          {id:2,title:'Adult Film',poster_path:'/adult.jpg'},
+          {id:3,title:'Unrated Film',poster_path:null}]});
       }
-      throw Error('Unexpected '+String(url));
+      if(u.includes('/movie/')&&u.endsWith('/release_dates')){
+        const id=Number(u.split('/')[5]);
+        const cert=id===1?'PG':id===2?'14A':'';
+        return response({results:[{iso_3166_1:'CA',
+          release_dates:[{type:3,release_date:'2026-10-09T00:00:00Z',certification:cert}]}]});
+      }
+      throw Error('Unexpected '+u);
     };
     const request=new Request('https://dashboard.example.org/api/activities/discover',{
       method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
       body:JSON.stringify({kind:'movies',mode:'family'})});
-    const result=await discover({request,env});
-    assert.equal(result.status,200,await result.clone().text());
-    const data=await result.json();
-    assert.equal(data.items.length,1);
-    assert.equal(data.items[0].name,'Family Film');
-    assert.equal(data.items[0].sourceUrl,'https://example.org/film-release');
+    const r=await discover({request,env});
+    assert.equal(r.status,200,await r.clone().text());
+    const result=await r.json();
+    assert.deepEqual(result.items.map(x=>x.name),['Family Film']);
+    assert.equal(result.items[0].rating,'PG');
+    assert.equal(result.items[0].posterUrl,'https://image.tmdb.org/t/p/w342/poster.jpg');
+    assert.equal(result.sourceCredit.url,'https://www.themoviedb.org/about/logos-attribution');
     const read=await listedDiscovery({request:new Request('https://dashboard.example.org/api/activities/discover?kind=movies&mode=family'),env});
     assert.equal((await read.json()).items.length,1);
-  }finally{global.fetch=oldFetch;global.Date=originalDate;}
+    assert.ok(calls.every(x=>x.startsWith('https://api.themoviedb.org/')));
+  }finally{global.fetch=oldFetch;global.Date=OriginalDate;}
 });
-
+test('Movies fail clearly without a TMDB key and never fall back to billable OpenAI',async()=>{
+  const env={ACTIVITIES_KV:{get:async()=>null,put:async()=>{}}};
+  const r=await discover({request:new Request('https://dashboard.example.org/api/activities/discover',{
+    method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
+    body:JSON.stringify({kind:'movies'})}),env});
+  assert.equal(r.status,503);
+  assert.match((await r.json()).error,/TMDB_API_KEY/);
+});
+test('Has Things events use its official venue coordinates, check routes, age/time and avoid OpenAI when enough events',async()=>{
+  const oldFetch=global.fetch,OriginalDate=global.Date,cache=new Map(),calls=[];
+  const date=OriginalDate.parse('2026-10-21T15:00:00Z');
+  global.Date=class extends OriginalDate{constructor(...x){super(...(x.length?x:[date]));}static now(){return date;}};
+  const env={HOME_ADDRESS:'PRIVATE',GOOGLE_MAPS_API_KEY:'map-key',OPENAI_API_KEY:'openai-key',
+    ACTIVITIES_KV:{get:async(k,f)=>f==='json'&&cache.get(k)?JSON.parse(cache.get(k)):cache.get(k)||null,
+      put:async(k,v)=>cache.set(k,v)}};
+  const response=x=>new Response(JSON.stringify(x),{headers:{'content-type':'application/json'}});
+  try{
+    global.fetch=async(url,options={})=>{
+      const u=String(url);calls.push(u);
+      if(u.includes('ottawa.hasthings.com/api/events?')){
+        return response({items:[
+          {id:'a',title:'Family Sports',category:'sports',status:'scheduled',startTimeKnown:true,
+            startsAt:'2026-10-21T22:00:00Z',ageRestriction:'All ages',importance:30,
+            venue:{slug:'venue-a'},url:'https://ottawa.hasthings.com/events/family-sports'},
+          {id:'b',title:'Art Exhibition',category:'art',status:'scheduled',startTimeKnown:true,
+            startsAt:'2026-10-21T23:00:00Z',importance:25,
+            venue:{slug:'venue-b'},url:'https://ottawa.hasthings.com/events/art-exhibition'},
+          {id:'c',title:'Theatre',category:'theatre',status:'scheduled',startTimeKnown:true,
+            startsAt:'2026-10-21T22:30:00Z',importance:20,
+            venue:{slug:'venue-c'},url:'https://ottawa.hasthings.com/events/theatre'},
+          {id:'d',title:'Nightclub',category:'dj-party',status:'scheduled',startTimeKnown:true,
+            startsAt:'2026-10-21T23:00:00Z',importance:90,ageRestriction:'19+',
+            venue:{slug:'venue-d'},url:'https://ottawa.hasthings.com/events/nightclub'}
+        ],nextOffset:null});
+      }
+      if(u.includes('ottawa.hasthings.com/api/venues/'))
+        return response({item:{slug:u.split('/').pop(),name:'Sample Venue',
+          address:'1074 Bank Street, Ottawa, ON K1S 3X3',latitude:45.39,longitude:-75.68}});
+      if(u.startsWith('https://maps.googleapis.com/maps/api/geocode/json'))
+        return response({status:'OK',results:[{geometry:{location:{lat:45.36,lng:-75.7}}}]});
+      if(u.includes('/distanceMatrix/v2:computeRouteMatrix')){
+        const destinations=JSON.parse(options.body).destinations;
+        return response(destinations.map((_,i)=>({originIndex:0,destinationIndex:i,condition:'ROUTE_EXISTS',
+          distanceMeters:5000+i*1000,duration:'900s'})));
+      }
+      throw Error('Unexpected '+u);
+    };
+    const request=new Request('https://dashboard.example.org/api/activities/discover',{
+      method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
+      body:JSON.stringify({kind:'events',mode:'family',maxKm:10})});
+    const r=await discover({request,env});
+    assert.equal(r.status,200,await r.clone().text());
+    const data=await r.json();
+    assert.equal(data.items.length,3);
+    assert.ok(data.items.every(x=>x.km<=10 && x.provider==='Has Things'));
+    assert.ok(data.items.every(x=>x.name!=='Nightclub'));
+    assert.equal(data.sourceCredit.label,'Data: Has Things (hasthings.com) · ODbL 1.0');
+    assert.ok(calls.every(x=>!x.includes('api.openai.com')));
+    assert.ok(calls.some(x=>x.includes('ottawa.hasthings.com/api/venues')));
+  }finally{global.fetch=oldFetch;global.Date=OriginalDate;}
+});
 test('couple evenings remain possible after 8 PM, while family hours end earlier',()=>{
   const place={category:'food',currentOpeningHours:{periods:[{
     open:{date:{year:2026,month:10,day:21},hour:0,minute:0},
