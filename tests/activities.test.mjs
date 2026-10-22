@@ -585,3 +585,10 @@ test('TMDB external requests remain under Workers Free subrequest limit with 200
   assert.deepEqual(films,[]);assert(count<=38,'subrequest cap must be enforced');
  }finally{global.fetch=previous;}
 });
+
+test('Couple always excludes children even if a stored toggle or API body says Kids Yes',()=>{
+ assert.equal(normalizeOptions({mode:'couple',kidsYes:true,kids:2}).kids,0);
+ assert.equal(normalizeOptions({mode:'couple',kidsYes:false,kids:5}).kids,0);
+ assert.equal(normalizeOptions({mode:'family',kidsYes:true}).kids,2);
+ assert.equal(normalizeOptions({mode:'visits',kidsYes:false}).kids,0);
+});

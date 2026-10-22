@@ -65,9 +65,9 @@ window.ActivitiesPanel={
   <div class="activities-controls">
     <div class="activities-modes" role="group" aria-label="Outing type"><button data-mode-choice="couple">❤️ Couple</button><button data-mode-choice="family">👨‍👩‍👧‍👦 Family</button><button data-mode-choice="visits">🏠 Visits</button></div>
     <div class="activities-filters">
-      <div class="activities-kids" role="group" aria-label="Bring children"><span>Kids</span><button type="button" data-kids="yes">✓ Yes</button><button type="button" data-kids="no">No</button></div>
-      <label class="activities-select">Budget<select id="ideas-budget" aria-label="Budget"><option value="free">Free</option><option value="under100">Under $100</option><option value="any">Any budget</option></select></label><label class="activities-select">Distance<select id="ideas-distance" aria-label="Maximum driving distance"><option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option><option value="30">30 km</option><option value="50">50 km</option></select></label>
-      <div class="activities-env" role="group" aria-label="Activity environment"><button data-env="all">Both</button><button data-env="indoor">Indoor</button><button data-env="outdoor">Outdoor</button></div>
+      <div class="activities-kids" role="group" aria-label="Incluir crianças"><span>Crianças</span><button type="button" data-kids="yes">✓ Sim</button><button type="button" data-kids="no">Não</button></div>
+      <label class="activities-select activities-budget">Orçamento<select id="ideas-budget" aria-label="Budget"><option value="free">Grátis</option><option value="under100">Até C$100</option><option value="any">Sem limite</option></select></label><label class="activities-select activities-distance">Distância<select id="ideas-distance" aria-label="Maximum driving distance"><option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option><option value="30">30 km</option><option value="50">50 km</option></select></label>
+      <div class="activities-env" role="group" aria-label="Activity environment"><button data-env="all">Ambos</button><button data-env="indoor">Indoor</button><button data-env="outdoor">Outdoor</button></div>
     </div>
     <div class="activities-tabs" role="tablist" aria-label="Recommendations sections"><button role="tab" data-kind="ideas">✨ Ideas</button><button role="tab" data-kind="events">🎟 Events</button><button role="tab" data-kind="movies">🎬 Movies</button><button role="tab" data-kind="home">🏠 At Home</button></div>
   </div>
@@ -87,7 +87,8 @@ window.ActivitiesPanel={
   Object.assign(state,defaults[state.mode]);
   if(Number.isInteger(savedControls.adults))state.adults=Math.max(1,Math.min(8,savedControls.adults));
   if(Number.isInteger(savedControls.kids))state.kids=Math.max(0,Math.min(10,savedControls.kids));
-  const params=()=>({mode:state.mode,adults:state.adults,kidsYes:state.kids>0,kids:state.kids,budget:state.budget,environment:state.environment,maxKm:state.maxKm});
+  if(state.mode==='couple')state.kids=0;
+  const params=()=>({mode:state.mode,adults:state.adults,kidsYes:state.mode!=='couple'&&state.kids>0,kids:state.mode==='couple'?0:state.kids,budget:state.budget,environment:state.environment,maxKm:state.maxKm});
   const persist=()=>{try{localStorage.setItem('family:activities:controls:v2',JSON.stringify(params()));}catch{}};
   const active=()=>root.isConnected&&isActive();
   function fit(){if(active())root.style.height=Math.max(0,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
@@ -110,10 +111,11 @@ window.ActivitiesPanel={
   }
   const kidSafeMovie=x=>['G','PG'].includes(String(x?.rating||'').trim().toUpperCase());
   const visibleMovies=items=>state.kids>0?items.filter(kidSafeMovie):items;
-  const homeItems=()=>window.HomeIdeas?.generate({kids:state.kids>0,mode:state.mode,rotation:state.homeRotation})||[];
+  const homeItems=()=>window.HomeIdeas?.generate({kids:state.mode!=='couple'&&state.kids>0,mode:state.mode,rotation:state.homeRotation})||[];
   // This does NOT search for a new title. It only uses the family's already
   // saved Canadian G/PG movie listing when streaming is explicitly listed.
   const homeMovie=films=>{
+    if(state.mode==='couple')return null;
     const best=(Array.isArray(films)?films:[]).filter(x=>(state.kids===0||kidSafeMovie(x))&&
       x.watch?.verified===true&&(x.watch?.subscription?.length||x.watch?.free?.length)&&URLSAFE(x.sourceUrl))
       .sort((a,b)=>Number(b.rating==='G')-Number(a.rating==='G'))[0];
@@ -134,16 +136,23 @@ window.ActivitiesPanel={
     root.classList.toggle('activities-movies',state.kind==='movies');
     root.classList.toggle('activities-ideas',state.kind==='ideas');
     root.classList.toggle('activities-home',state.kind==='home');
+    root.classList.toggle('activities-events',state.kind==='events');
+    root.classList.toggle('activities-couple',state.mode==='couple');
+    root.classList.toggle('activities-only-audience',state.kind==='home'||state.kind==='movies');
     for(const b of root.querySelectorAll('[data-mode-choice]'))b.classList.toggle('selected',b.dataset.modeChoice===state.mode);
     for(const b of root.querySelectorAll('[data-env]'))b.classList.toggle('selected',b.dataset.env===state.environment);
     for(const b of root.querySelectorAll('[data-kind]')){
       const on=b.dataset.kind===state.kind;b.classList.toggle('selected',on);b.setAttribute('aria-selected',String(on));
     }
     for(const b of root.querySelectorAll('[data-kids]'))b.classList.toggle('selected',(b.dataset.kids==='yes')===(state.kids>0));
+    const kidsControl=root.querySelector('.activities-kids');
+    kidsControl.hidden=state.mode==='couple';
+    kidsControl.setAttribute('aria-hidden',String(state.mode==='couple'));
+    kidsControl.querySelectorAll('button').forEach(b=>{b.disabled=state.mode==='couple';});
     q('#ideas-budget').value=state.budget;q('#ideas-distance').value=String(state.maxKm);
     refresh.textContent=state.busy?'⏳ Conferindo…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':state.kind==='home'?'↻ Outras ideias':'↻ Find Movies';
     refresh.disabled=state.busy;
-    caption.textContent=state.kind==='home'?'🏠 Atividades em casa · fontes: PBS KIDS, Science World, NASA e AAP · sem custos de IA':
+    caption.textContent=state.kind==='home'?'🏠 Guias completos no tablet · sem abrir páginas externas · sem custos de IA':
       state.kind==='ideas'?'📍 '+state.maxKm+' km by road · Google Maps location/hours · Admission sourced separately':
       state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
       '🎬 Canadian releases: this month + recent · This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.';
@@ -266,7 +275,69 @@ window.ActivitiesPanel={
         ' · Future ideas will consider this.';
     }catch(e){modalStatus.textContent='Could not save: '+(e.message||'Try again');}
   }
+  function showHomeGuide(item){
+    const focused=document.activeElement;
+    closeModal();
+    const backdrop=el('div','activities-modal-backdrop activities-home-backdrop');
+    const panel=el('section','activities-modal activities-home-guide');
+    panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+    panel.setAttribute('aria-label','Passo a passo: '+item.name);
+    backdrop._focusBefore=focused;
+    const header=el('div','activities-home-guide-header');
+    const identity=el('div','activities-home-guide-identity');
+    identity.append(el('span','activities-home-guide-icon',item.icon||'🏡'));
+    const titles=el('div','activities-home-guide-titles');
+    titles.append(el('span','activities-home-guide-kicker',item.audience==='couple'?'❤️ Encontro a dois':'🏠 Atividade em casa'),
+      el('h2','',item.name));
+    identity.append(titles);
+    const close=el('button','activities-close activities-home-guide-close','✕ Fechar');
+    close.type='button';close.addEventListener('click',closeModal,{signal});
+    header.append(identity,close);
+    const intro=el('div','activities-home-guide-summary');
+    intro.append(el('div','','⏱ '+item.duration+' min'),el('div','','🎒 '+item.bring));
+    const subtitle=el('p','activities-home-guide-reason','💡 '+item.why);
+    const steps=el('ol','activities-home-guide-steps');
+    (item.steps||[]).forEach((step,i)=>{
+      const li=el('li');li.append(el('span','activities-home-step-number',String(i+1)),el('span','',step));steps.append(li);
+    });
+    const heading=el('h3','activities-home-guide-steps-title','Como fazer');
+    const section=el('div','activities-home-guide-content');
+    section.append(heading,steps);
+    // Referenced educational material is attribution, never an outbound kiosk
+    // navigation. Original step-by-step lives here on the tablet.
+    const source=el('p','activities-home-guide-source','Ideia adaptada para o Family Dash');
+    if(URLSAFE(item.sourceUrl)){
+      const host=new URL(item.sourceUrl).hostname.replace(/^www\./,'');
+      source.textContent='Inspiração e leitura complementar: '+host+' · sem sair do painel';
+    }
+    section.append(source);
+    const vid=typeof item.videoId==='string'&&/^[A-Za-z0-9_-]{11}$/.test(item.videoId)?item.videoId:'';
+    if(vid){
+      const area=el('div','activities-home-guide-media');
+      const play=el('button','activities-home-guide-play','▶ Assistir vídeo curto aqui');
+      play.type='button';
+      const box=el('div','activities-home-guide-video');
+      play.addEventListener('click',()=>{
+        if(box.querySelector('iframe'))return;
+        const frame=el('iframe','activities-home-guide-frame');
+        frame.title='Vídeo demonstrativo: '+item.name;
+        frame.src='https://www.youtube-nocookie.com/embed/'+vid+'?playsinline=1&rel=0';
+        frame.allow='accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture';
+        frame.referrerPolicy='origin';frame.allowFullscreen=true;
+        box.append(frame);play.hidden=true;
+      },{signal});
+      area.append(play,box,el('p','activities-home-guide-video-note',
+        'Vídeo de referência (pode estar em outro idioma). Caso o player seja bloqueado, o guia acima continua disponível.'));
+      section.append(area);
+    }
+    panel.append(header,intro,subtitle,section);
+    backdrop.append(panel);
+    backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal();},{signal});
+    document.body.append(backdrop);state.modal=backdrop;
+    close.focus({preventScroll:true});
+  }
   function details(item){
+    if(item.kind==='home'){showHomeGuide(item);return;}
     closeModal();
     const backdrop=el('div','activities-modal-backdrop'),panel=el('div','activities-modal');
     panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
@@ -483,9 +554,9 @@ window.ActivitiesPanel={
     const last=state.snapshot?.generatedAt;
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
-    meta.textContent=(state.kind==='home'?'Atividades selecionadas para casa':
+    meta.textContent=(state.kind==='home'?'Escolha uma atividade e toque para ver o guia':
       last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
-      (state.kind==='home'?' · '+arr.length+' atividades para '+(state.kids>0?'crianças e família':'adultos'):'')+
+      (state.kind==='home'?' · '+arr.length+' ideias para '+(state.mode==='couple'?'um encontro romântico':state.mode==='visits'?'receber visitas':state.kids>0?'a família':'adultos'):'')+
       (state.kind==='movies'&&state.kids>0&&state.items.length>arr.length?' · '+(state.items.length-arr.length)+' filmes 14A/sem classificação ocultados':'')+
       (state.kind==='movies'&&arr.length?' · '+arr.length+' filmes confirmados'+
         (arr.some(x=>x.metadataVersion!==2)?' · Atualize para nota e sinopse em PT-BR':''):'')+
@@ -553,7 +624,8 @@ window.ActivitiesPanel={
   }
   for(const btn of root.querySelectorAll('[data-mode-choice]'))btn.addEventListener('click',()=>{
     if(state.busy)return;
-    state.mode=btn.dataset.modeChoice;Object.assign(state,defaults[state.mode]);persist();load();
+    state.mode=btn.dataset.modeChoice;Object.assign(state,defaults[state.mode]);
+    if(state.mode==='couple')state.kids=0;persist();load();
   },{signal});
   for(const btn of root.querySelectorAll('[data-kind]'))btn.addEventListener('click',()=>{
     if(state.busy)return;
@@ -563,6 +635,7 @@ window.ActivitiesPanel={
     state.environment=btn.dataset.env;persist();render();
   },{signal});
   for(const btn of root.querySelectorAll('[data-kids]'))btn.addEventListener('click',()=>{
+    if(state.mode==='couple')return;
     state.kids=btn.dataset.kids==='yes'?2:0;persist();
     if(state.kind==='movies'||state.kind==='home')load();else render();
   },{signal});

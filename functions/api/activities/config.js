@@ -41,7 +41,7 @@ export function normalizeOptions(input={}) {
   const mode=MODES.includes(input.mode)?input.mode:'family';
   const adults=Number.isInteger(Number(input.adults))?
     Math.max(1,Math.min(8,Number(input.adults))):(mode==='visits'?4:2);
-  const kids=typeof input.kidsYes==='boolean'?(input.kidsYes?2:0):
+  const kids=mode==='couple'?0:typeof input.kidsYes==='boolean'?(input.kidsYes?2:0):
     Number.isInteger(Number(input.kids))?Math.max(0,Math.min(10,Number(input.kids))):(mode==='couple'?0:2);
   const environment=ENVIRONMENTS.includes(input.environment)?input.environment:'all';
   const budget=BUDGETS.includes(input.budget)?input.budget:'any';
