@@ -62,9 +62,10 @@ export function outdoorWeather(hours,date,minutes) {
   return {ok:!severe && !rainy,description:Math.round(row.temp)+'°C · rain '+Math.round(row.rain)+'%',penalty};
 }
 export async function getJSON(url,options={}) {
-  const c=new AbortController(),timer=setTimeout(()=>c.abort(),14000);
+  const {timeoutMs=14000,...fetchOptions}=options;
+  const c=new AbortController(),timer=setTimeout(()=>c.abort(),Math.max(1000,Math.min(55000,timeoutMs)));
   try {
-    const r=await fetch(url,{...options,signal:c.signal});
+    const r=await fetch(url,{...fetchOptions,signal:c.signal});
     if(!r.ok)throw Error('Service HTTP '+r.status);
     return await r.json();
   } finally {clearTimeout(timer);}
