@@ -66,8 +66,23 @@ window.ActivitiesPanel={
     refresh.textContent=state.busy?'⏳ Checking…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':'↻ Find Movies';
     refresh.disabled=state.busy;
     caption.textContent=state.kind==='ideas'?'📍 Selected '+state.maxKm+' km by road · Google Maps · Prices unverified':
-      state.kind==='events'?'🎟 Events today · Max '+state.maxKm+' km · Official links':
-      '🎬 Canadian releases this month · Showtimes must be verified';
+      state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
+      '🎬 TMDB · Canadian theatrical releases · Showtimes not verified';
+    caption.replaceChildren(document.createTextNode(caption.textContent));
+    if(state.kind==='movies'){
+      const logo=el('img','activities-tmdb-logo');
+      logo.src='https://www.themoviedb.org/assets/2/v4/logos/v2/blue_long_2-9665a76b1ae401a510ec1e0ca40ddcb3b0cfe45f1d51b77a308fea0845885648.svg';
+      logo.alt='TMDB';logo.loading='lazy';
+      const a=link('TMDB information','https://www.themoviedb.org/about/logos-attribution');
+      a.className='activities-credit-link';a.textContent='';a.append(logo);
+      a.title='This product uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.';
+      caption.append(document.createTextNode(' · '),a);
+    }
+    if(state.kind==='events'){
+      const a=link('Has Things license','https://ottawa.hasthings.com/feeds#license');
+      a.className='activities-credit-link';a.textContent='License ↗';
+      caption.append(document.createTextNode(' · '),a);
+    }
     q('#ideas-clock').textContent=fmt();
   }
   function message(title,description){
@@ -139,12 +154,15 @@ window.ActivitiesPanel={
       '🍿 Canadian theatrical release: '+item.releaseDate,
       '🎫 Canadian / Ontario rating: '+item.rating,
       '🕒 Showtimes at local cinemas: Not verified',
-      '✨ '+(item.reason||'See source for details')
+      '✨ '+(item.reason||'See source for details'),
+      'ℹ TMDB data and posters: not endorsed or certified by TMDB.'
     ]:item.kind==='events'?[
       '📆 '+item.date+' · '+item.time+' (Ottawa local time)',
       '📍 '+item.venue+' · '+item.address,
       '🚗 '+item.km+' km · '+item.driveMinutes+' min from home (estimated)',
-      '✨ '+(item.reason||'Check the official organizer')
+      '✨ '+(item.reason||'Check the official organizer'),
+      '🔍 Source: '+(item.provider||'Event feed')+' · '+(item.ageRestriction||'Age suitability unverified'),
+      '📚 Event listings: Has Things, ODbL 1.0 (for feed listings).'
     ]:[
       '📍 '+(item.address||'Location unverified'),
       '🚗 '+item.km+' km · '+item.driveMinutes+' min from home',
@@ -167,8 +185,9 @@ window.ActivitiesPanel={
       if(URLSAFE(item.website))actions.append(link('🌐 Website / admission',item.website));
       if(URLSAFE(item.mapsUrl))actions.append(link('Google Maps',item.mapsUrl));
     }else if(URLSAFE(item.sourceUrl)){
-      actions.append(link('🔗 Verified source',item.sourceUrl));
-      if(item.kind==='movies')actions.append(link('🎟 Ottawa showtimes','https://www.tribute.ca/showtimes/movie/ontario/ottawa/'));
+      actions.append(link(item.kind==='movies'?'🎬 TMDB details':'🔗 Event source',item.sourceUrl));
+      if(item.kind==='events'&&URLSAFE(item.ticketUrl))actions.append(link('🎟 Tickets / organizer',item.ticketUrl));
+      if(item.kind==='movies')actions.append(link('🎟 Check Ottawa showtimes','https://www.tribute.ca/showtimes/movie/ontario/ottawa/'));
     }
     if(item.kind==='ideas'){
       const note=el('p','activities-modal-tip','Help What to Do learn your preferences.');
@@ -196,7 +215,12 @@ window.ActivitiesPanel={
     article.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();details(item);}},{signal});
     const photo=el('div','activities-photo');
     if(item.kind==='ideas')photoFor(item,photo,state.mode);
-    else photo.append(el('span','activities-photo-placeholder',item.kind==='movies'?'🎬':'🎟️'));
+    else if(item.kind==='movies'&&URLSAFE(item.posterUrl)){
+      const img=el('img','activities-movie-poster');img.alt='Poster for '+item.name;
+      img.loading='lazy';img.referrerPolicy='no-referrer';
+      img.addEventListener('error',()=>{img.remove();photo.append(el('span','activities-photo-placeholder','🎬'));},{once:true});
+      img.src=item.posterUrl;photo.append(img);
+    }else photo.append(el('span','activities-photo-placeholder',item.kind==='movies'?'🎬':'🎟️'));
     const content=el('div','activities-description');
     const heading=el('div','activities-heading');
     heading.append(el('strong','activities-name',item.name),
@@ -205,7 +229,7 @@ window.ActivitiesPanel={
     if(item.kind==='movies'){
       content.append(el('div','activities-line','📅 Canada release: '+item.releaseDate),
         el('div','activities-line','🎫 Rating: '+item.rating+' · Local showtimes not verified'),
-        el('div','activities-line',item.reason||'Open for release details'));
+        el('div','activities-line',item.reason||'Open TMDB details'));
     }else if(item.kind==='events'){
       content.append(el('div','activities-line','📆 Today · '+item.time+' · '+item.venue),
         el('div','activities-line','📍 '+item.km+' km / '+item.driveMinutes+' min by car'),
