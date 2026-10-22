@@ -43,7 +43,7 @@ window.ActivitiesPanel={
     environment:['all','indoor','outdoor'].includes(savedControls.environment)?savedControls.environment:'all',
     maxKm:[5,10,20,30,50].includes(Number(savedControls.maxKm))?Number(savedControls.maxKm):20,
     kind:'ideas',adults:2,kids:2,items:[],snapshot:null,
-    page:0,error:'',busy:false,feedback:new Map(),photos:new Map(),modal:null
+    page:0,error:'',busy:false,feedback:new Map(),modal:null
   };
   Object.assign(state,defaults[state.mode]);
   if(Number.isInteger(savedControls.adults))state.adults=Math.max(1,Math.min(8,savedControls.adults));
@@ -89,8 +89,11 @@ window.ActivitiesPanel={
     const apply=data=>{
       if(!holder.isConnected||!data?.url)return;
       const url=URLSAFE(data.url);if(!url)return;
-      const img=el('img');img.src=url;img.alt=item.name+' photo';img.loading='lazy';
-      holder.prepend(img);holder.querySelector('.activities-photo-placeholder')?.remove();
+      const img=el('img');img.alt='Photo of '+item.name;img.loading='eager';img.referrerPolicy='no-referrer';
+      img.addEventListener('load',()=>holder.querySelector('.activities-photo-placeholder')?.remove(),{once:true});
+      img.addEventListener('error',()=>{img.remove();
+        holder.append(el('span','activities-photo-unavailable','Photo unavailable'));},{once:true});
+      holder.prepend(img);img.src=url;
       const credit=el('span','activities-photo-credit','Photo: ');
       const people=data.credits||[];
       if(!people.length)credit.append(document.createTextNode('Google Maps'));
@@ -105,10 +108,13 @@ window.ActivitiesPanel={
       }
       holder.append(credit);
     };
-    const key=mode+':'+item.id;
-    if(state.photos.has(key)){apply(state.photos.get(key));return;}
-    fetch('/api/activities/photo?placeId='+encodeURIComponent(item.id)+'&mode='+mode,{credentials:'same-origin',signal})
-      .then(r=>r.ok?r.json():null).then(data=>{if(data?.url)state.photos.set(key,data);apply(data);}).catch(()=>{});
+    // Never cache Google Places photo URLs/names; only keep the already-rendered
+    // <img> element alive while switching tablet panels.
+    fetch('/api/activities/photo?placeId='+encodeURIComponent(item.id)+'&mode='+mode,{credentials:'same-origin',signal,cache:'no-store'})
+      .then(async r=>{const data=await r.json();return r.ok?data:{error:data.error||'Photo unavailable'};})
+      .then(data=>{if(data?.url)apply(data);
+        else if(holder.isConnected)holder.append(el('span','activities-photo-unavailable','Photo not available'));
+      }).catch(()=>{if(holder.isConnected)holder.append(el('span','activities-photo-unavailable','Photo unavailable'));});
   }
   function closeModal(){state.modal?.remove();state.modal=null;}
   async function feedback(item,value,modalStatus){
@@ -264,7 +270,7 @@ window.ActivitiesPanel={
       const d=await r.json();if(!r.ok)throw Error(d.error||'Generation failed');
       if(state.mode!==mode||state.kind!==kind)return;
       state.snapshot=d;state.items=(d.items||[]).map(x=>({...x,kind}));
-      state.photos.clear();state.page=0;
+      state.page=0;
     }catch(e){state.error=e.message||'Generation failed. Old results are still stored.';}
     finally{state.busy=false;render();}
   }
