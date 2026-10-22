@@ -173,8 +173,6 @@ export async function onRequestPost(context) {
       return ranges(data.events,date);
     };
     const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
-    if(firstBusy.some(([a,b])=>a===0&&b===1440))
-      return json({error:'Calendar has an all-day commitment on the selected day.'},409);
     const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home)]);
     const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
     const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
@@ -196,10 +194,8 @@ export async function onRequestPost(context) {
       // If it is too late for a realistic outing, use tomorrow's free hours
       // without charging again for Places/Routes searches.
       const tomorrow=addDay(targetDate),tomorrowBusy=await agendaFor(tomorrow);
-      if(!tomorrowBusy.some(([a,b])=>a===0&&b===1440)){
-        const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
-        if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
-      }
+      const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
+      if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
     }
     if(pool.length<4)throw Error('Fewer than four suitable places with verified driving distances and free time slots');
     const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
