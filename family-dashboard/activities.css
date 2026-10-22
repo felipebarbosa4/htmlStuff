@@ -129,3 +129,24 @@
 .activities-card-movie .activities-line{font-size:clamp(11px,1.2vw,14px);line-height:1.2;flex-shrink:0}
 .activities-card-movie .activities-trailer-link{font-size:12px;line-height:1.1;flex-shrink:0}
 @media (max-height:820px) and (min-width:691px){.activities-grid{grid-template-rows:repeat(2,minmax(0,1fr))}}
+
+/* iPad fix: JavaScript sets the row count to match visible cards, not empty tracks. */
+.activities-grid{align-content:stretch;min-height:0;grid-auto-rows:minmax(0,1fr)}
+.activities-card{min-height:0;height:100%;}
+.activities-card-movie .activities-photo{height:100%;}
+@media(max-height:720px){
+  .activities-root{gap:5px;padding-top:6px;padding-bottom:5px}
+  .activities-controls{gap:4px}
+  .activities-filters{padding:4px 7px}
+  .activities-modes button,.activities-tabs button{padding:5px 10px;min-height:33px}
+}
+
+/* In phone landscape, movie budget/radius/indoor filters don't affect films.
+   Hide that inapplicable form only for Movies so the poster/card stays large. */
+@media(max-height:500px){
+ .activities-root.activities-movies .activities-filters{display:none}
+ .activities-root{padding-left:10px;padding-right:10px}
+ .activities-root .activities-top h1{font-size:19px}
+ .activities-root .activities-sub{font-size:10px}
+ .activities-root .activities-footer{font-size:9px}
+}
