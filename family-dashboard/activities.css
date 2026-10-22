@@ -325,3 +325,64 @@
  .activities-root.activities-movies .activities-filters .activities-env{display:none}
  .activities-root.activities-movies .activities-kids button{min-height:29px;padding:3px 7px}
 }
+
+/* UX consistency: only controls which actually change the selected panel. */
+.activities-kids[hidden],.activities-root.activities-couple .activities-kids{display:none!important}
+.activities-root.activities-movies .activities-filters .activities-select,
+.activities-root.activities-movies .activities-filters .activities-env{display:none}
+.activities-root.activities-events .activities-budget,
+.activities-root.activities-events .activities-env{display:none}
+.activities-root.activities-only-audience .activities-filters{
+ background:transparent;border:0;padding:0;min-height:32px
+}
+.activities-root.activities-couple.activities-home .activities-filters,
+.activities-root.activities-couple.activities-movies .activities-filters{display:none!important}
+.activities-root.activities-only-audience .activities-kids{
+ border:1px solid #345f78;border-radius:13px;padding:4px 10px;background:#152b41
+}
+.activities-root.activities-home.activities-couple .activities-card{
+ border-color:#665077;background:#242a48
+}
+.activities-root.activities-home.activities-couple .activities-home-art{
+ background:linear-gradient(150deg,#6d406b,#263c6b)
+}
+.activities-root .activities-tabs button[data-kind="home"].selected{
+ background:#73eadb;border-color:#73eadb;color:#062b32
+}
+/* Guided home activities stay in the same page, no external navigation. */
+.activities-home-backdrop{z-index:1300;padding:10px}
+.activities-home-guide{
+ width:min(900px,calc(100vw - 20px));max-width:100%;max-height:calc(100dvh - 20px);
+ overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;
+ gap:10px;padding:clamp(12px,2vw,20px);box-sizing:border-box
+}
+.activities-home-guide-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.activities-home-guide-identity{display:flex;align-items:center;gap:12px;min-width:0}
+.activities-home-guide-icon{font-size:clamp(30px,4vw,48px);flex-shrink:0}
+.activities-home-guide-titles{min-width:0}
+.activities-home-guide-kicker{color:#9deee4;font-size:12px;font-weight:800;letter-spacing:.02em}
+.activities-home-guide h2{font-size:clamp(19px,2.3vw,28px);line-height:1.15;margin:3px 0}
+.activities-home-guide-close{flex-shrink:0;font-size:13px;min-height:38px;padding:7px 12px}
+.activities-home-guide-summary{display:flex;gap:7px;flex-wrap:wrap}
+.activities-home-guide-summary>div{background:#203e5a;border:1px solid #42627d;border-radius:9px;padding:6px 9px;font-size:13px;font-weight:700}
+.activities-home-guide-reason{color:#d9f0fb;font-size:14px!important;margin:2px 0!important}
+.activities-home-guide-content{background:#10273f;border:1px solid #365576;border-radius:13px;padding:12px;min-height:0}
+.activities-home-guide-steps-title{font-size:16px;color:#97f0df;margin:0 0 10px}
+.activities-home-guide-steps{padding:0;margin:0;display:grid;gap:8px;list-style:none}
+.activities-home-guide-steps li{display:flex;align-items:flex-start;gap:11px;font-size:clamp(13px,1.4vw,16px);line-height:1.3}
+.activities-home-step-number{display:inline-flex;align-items:center;justify-content:center;
+ min-width:28px;height:28px;background:#73eadb;color:#102e3b;border-radius:50%;font-weight:900}
+.activities-home-guide-source{font-size:11px!important;line-height:1.3!important;color:#a4bacb;margin:10px 0 0!important}
+.activities-home-guide-media{margin-top:9px;display:grid;gap:7px}
+.activities-home-guide-play{background:#73eadb;color:#072b30;border:0;border-radius:10px;
+ padding:10px 14px;font-size:14px;font-weight:850;cursor:pointer;justify-self:start}
+.activities-home-guide-video{width:min(370px,100%)}
+.activities-home-guide-frame{width:100%;aspect-ratio:16/9;border:0;border-radius:10px;display:block}
+.activities-home-guide-video-note{font-size:11px!important;color:#9fb8ca;margin:0!important}
+@media(max-height:690px){
+ .activities-home-guide{gap:6px}
+ .activities-home-guide-content{padding:8px 11px}
+ .activities-home-guide-steps{gap:5px}
+ .activities-home-guide-steps li{font-size:13px}
+ .activities-home-guide-summary>div{padding:4px 7px;font-size:12px}
+}
