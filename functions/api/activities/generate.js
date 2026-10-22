@@ -58,10 +58,16 @@ async function findPlaces(key,origin,options,night=false) {
     .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat))
     .filter(([cat])=>!night||eligibleNightCategory(cat));
   const results=await Promise.allSettled(queries.map(async ([category,query])=>{
+    const nightQuery=night?{
+      food:'late night family friendly restaurant dessert cafe open late Ottawa Barrhaven Nepean',
+      indoor:'late night bowling arcade indoor games open late Ottawa Ontario',
+      culture:'late night live entertainment music shows open late Ottawa Ontario',
+      recreation:'late night indoor recreation bowling billiards Ottawa Ontario'
+    }[category]:null;
     const r=await getJSON('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
       headers:{'content-type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':fieldMask},
-      body:JSON.stringify({textQuery:query,languageCode:'en',pageSize:12,
+      body:JSON.stringify({textQuery:nightQuery||query,languageCode:'en',pageSize:12,
         locationBias:{circle:{center:{latitude:origin.lat,longitude:origin.lng},radius:options.maxKm*1000}}})
     });
     return (r.places||[]).filter(p=>p.id&&p.location&&p.businessStatus!=='CLOSED_PERMANENTLY')
