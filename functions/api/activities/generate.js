@@ -50,16 +50,19 @@ export async function forecast(origin) {
   if(!Array.isArray(h?.time))throw Error('Weather forecast missing');
   return h.time.map((time,i)=>({time,temp:h.temperature_2m[i],rain:h.precipitation_probability[i],wind:h.wind_speed_10m[i]}));
 }
-async function findPlaces(key,origin,options) {
+export function isNight(minutes) {return minutes>=20*60 || minutes<5*60;}
+export function eligibleNightCategory(category) {return ['indoor','food','culture','recreation'].includes(category);}
+async function findPlaces(key,origin,options,night=false) {
   const all=CATEGORY_SETS[options.mode];
   const queries=all.filter(([cat])=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
-    .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat));
+    .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat))
+    .filter(([cat])=>!night||eligibleNightCategory(cat));
   const results=await Promise.allSettled(queries.map(async ([category,query])=>{
     const r=await getJSON('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
       headers:{'content-type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':fieldMask},
       body:JSON.stringify({textQuery:query,languageCode:'en',pageSize:12,
-        locationBias:{circle:{center:{latitude:origin.lat,longitude:origin.lng},radius:20000}}})
+        locationBias:{circle:{center:{latitude:origin.lat,longitude:origin.lng},radius:options.maxKm*1000}}})
     });
     return (r.places||[]).filter(p=>p.id&&p.location&&p.businessStatus!=='CLOSED_PERMANENTLY')
       .map(p=>({...p,category}));
@@ -91,15 +94,16 @@ export function openingLabel(place) {
   if(!Array.isArray(hours?.weekdayDescriptions))return 'Hours unverified';
   return hours.weekdayDescriptions.join(' · ').slice(0,400);
 }
-export function scheduleFor(place,drive,date,earliest,busy,hours,latest=1200) {
-  const duration=place.category==='museum'?95:75;
+export function scheduleFor(place,drive,date,earliest,busy,hours,latest=1200,night=false) {
+  const duration=night?45:(place.category==='museum'?95:75);
   let best=null;
   for(let t=earliest;t+2*drive+duration<=latest;t+=30) {
     const arrival=t+drive,done=arrival+duration,home=done+drive;
     if(busy.some(([a,b])=>a<home&&b>t))continue;
     const open=openDuring(place.currentOpeningHours,date,arrival,done);
-    if(open===false)continue;
+    if(night?open!==true:open===false)continue;
     const outdoor=OUTDOOR.has(place.category);
+    if(night&&(!eligibleNightCategory(place.category)||outdoor))continue;
     const w=outdoorWeather(hours,date,arrival);
     // Bad weather discourages outdoor activities but does not silently replace them.
     const penalty=(outdoor?w.penalty:0)+(open===null?3:0)+(t-earliest)/140;
@@ -130,6 +134,7 @@ async function selectWithAI(env,date,forecastSummary,earliest,blocked,options,co
     ' Prioritize the CURRENT TIME, weather, available free slots and age appropriateness. '+
     'Budget preference: '+options.budget+' (free / under CAD 100 / no limit). Never promise an unverified price. '+
     'Environment: '+options.environment+'. Learned category feedback counts are supplied; prefer likes and avoid dislikes. '+
+    (options.nightMode?'It is night RIGHT NOW. Return only late-night indoor entertainment/cafes/dining types with verified-open venues; no parks or next-day advice. ':'')+
     'Never create names of venues, movie screenings, events, addresses, distances, ratings or opening hours. '+
     'Return valid JSON ONLY: {"categories":["park","museum"],"notes":{"park":{"bring":"short practical packing list","why":"short age-relevant reason"}}}. '+
     'Provide a distinct, brief practical packing list and reason for every selected category.';
@@ -163,12 +168,14 @@ export async function onRequestPost(context) {
     if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
     await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(Date.now()),{expirationTtl:120});
     const now=local();
-    const latest=options.mode==='couple'?1410:options.mode==='visits'?1290:1200;
+    const night=isNight(now.minute);
+    const latest=night?1440:options.mode==='couple'?1410:options.mode==='visits'?1290:1200;
     const cutoff=options.mode==='couple'?1320:options.mode==='visits'?1260:1200;
-    let targetDate=now.minute>=cutoff?addDay(now.date):now.date;
+    let targetDate=night?now.date:now.minute>=cutoff?addDay(now.date):now.date;
+    options.nightMode=night;
     const earliestFor=date=>{
       const day=local(new Date(date+'T12:00:00Z')).weekday;
-      const minimum=options.kids>0&&!['Sat','Sun'].includes(day)?930:540;
+      const minimum=night?0:options.kids>0&&!['Sat','Sun'].includes(day)?930:540;
       return date===now.date?Math.max(now.minute+15,minimum):minimum;
     };
     const agendaFor=async date=>{
@@ -180,12 +187,12 @@ export async function onRequestPost(context) {
       return ranges(data.events,date);
     };
     const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
-    const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home,options)]);
+    const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home,options,night)]);
     const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
     const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
       const route=distances.get(i);
-      if(!route||route.km>MAX_KM||!Number.isFinite(route.minutes))return null;
-      const schedule=scheduleFor(p,route.minutes,date,earliest,blocked,weather,latest);
+      if(!route||route.km>options.maxKm||!Number.isFinite(route.minutes))return null;
+      const schedule=scheduleFor(p,route.minutes,date,earliest,blocked,weather,latest,night);
       if(!schedule)return null;
       return {id:p.id,name:p.displayName?.text||'Activity',category:p.category,
         address:p.formattedAddress||'',km:Math.round(route.km*10)/10,driveMinutes:route.minutes,
@@ -197,14 +204,14 @@ export async function onRequestPost(context) {
         score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};
     }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,26);
     let pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
-    if(pool.length<3 && targetDate===now.date) {
+    if(!night && pool.length<3 && targetDate===now.date) {
       // If it is too late for a realistic outing, use tomorrow's free hours
       // without charging again for Places/Routes searches.
       const tomorrow=addDay(targetDate),tomorrowBusy=await agendaFor(tomorrow);
       const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
       if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
     }
-    if(!pool.length)throw Error('No suitable places with verified driving distances and available slots');
+    if(!pool.length)throw Error(night?'No indoor activities confirmed open for enough time tonight within '+options.maxKm+' km. Try another distance or tomorrow.':'No suitable places with verified driving distances and available slots');
     const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
       .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[],options,counts);
     // Feedback is authoritative: exclude places marked Not interested; de-prioritize
@@ -216,7 +223,7 @@ export async function onRequestPost(context) {
       return (b.score+bonus(b))-(a.score+bonus(a));
     });
     const byId=new Map(pool.map(x=>[x.id,x]));
-    const preferences=[...new Set([...choice.categories,...CATEGORY_SETS[options.mode].map(q=>q[0])])];
+    const preferences=[...new Set([...choice.categories,...CATEGORY_SETS[options.mode].map(q=>q[0])])].filter(cat=>!night||eligibleNightCategory(cat));
     const ranked=preferences.flatMap(cat=>pool.filter(p=>p.category===cat).map(p=>p.id));
     const ids=[],categoryCount=new Map();
     // Enforce variety even when the model over-selects one category.
@@ -239,7 +246,7 @@ export async function onRequestPost(context) {
         price:'Check admission price'};
     }).filter(Boolean);
     const result={date:targetDate,generatedAt:new Date().toISOString(),provider:choice.provider,
-      items,coverage:items.length,timezone:ZONE,options};
+      items,coverage:items.length,timezone:ZONE,options:{...options,nightMode:night}};
     // Cache only place IDs, user-facing activity types and model-authored notes.
     // Never persist Google place names/addresses/ratings/hours/route data.
     const stored={date:targetDate,generatedAt:result.generatedAt,provider:choice.provider,
