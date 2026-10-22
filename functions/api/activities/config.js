@@ -2,6 +2,7 @@
 export const MODES=['family','couple','visits'];
 export const ENVIRONMENTS=['all','indoor','outdoor'];
 export const BUDGETS=['free','under100','any'];
+export const DISTANCE_CHOICES=[5,10,20,30,50];
 export const CATEGORY_SETS={
   family:[
     ['park','family playground outdoor parks Ottawa Ontario'],
@@ -10,6 +11,7 @@ export const CATEGORY_SETS={
     ['recreation','swimming pools community recreation centres Ottawa Ontario'],
     ['library','Ottawa public library branches children Ottawa Ontario'],
     ['animals','farm animals family nature centre Ottawa Ontario'],
+    ['food','family friendly dessert cafes and restaurants Ottawa Ontario'],
     ['cinema','movie theatres family films Ottawa Ontario']
   ],
   couple:[
@@ -43,7 +45,8 @@ export function normalizeOptions(input={}) {
     Math.max(0,Math.min(10,Number(input.kids))):(mode==='couple'?0:2);
   const environment=ENVIRONMENTS.includes(input.environment)?input.environment:'all';
   const budget=BUDGETS.includes(input.budget)?input.budget:'any';
-  return {mode,adults,kids,environment,budget};
+  const maxKm=DISTANCE_CHOICES.includes(Number(input.maxKm))?Number(input.maxKm):20;
+  return {mode,adults,kids,environment,budget,maxKm};
 }
 export const keyFor=mode=>STORAGE_PREFIX+(MODES.includes(mode)?mode:'family');
 export const safeSource=url=>{
