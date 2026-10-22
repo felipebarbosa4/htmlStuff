@@ -22,7 +22,7 @@ window.ActivitiesPanel={
   const ctrl=new AbortController(),signal=ctrl.signal;
   const root=el('section','activities-root');root.setAttribute('aria-label','Family outing planner');
   host.appendChild(root);
-  root.innerHTML=`<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub" id="ideas-status">Ottawa · <span id="ideas-clock"></span> · Only refresh on request</div></div><button id="ideas-refresh" type="button" class="activities-refresh">↻ Refresh Ideas</button></div>
+  root.innerHTML=`<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub"><span id="ideas-clock"></span> · Ottawa · <span id="ideas-status">On demand</span></div></div><button id="ideas-refresh" type="button" class="activities-refresh">↻ Refresh Ideas</button></div>
   <div class="activities-controls">
     <div class="activities-modes" role="group" aria-label="Outing type"><button data-mode-choice="couple">❤️ Couple</button><button data-mode-choice="family">👨‍👩‍👧‍👦 Family</button><button data-mode-choice="visits">🏠 Visits</button></div>
     <div class="activities-filters">
@@ -207,6 +207,10 @@ window.ActivitiesPanel={
       content.append(el('div','activities-line','🎒 '+item.bring),
         el('div','activities-line','🕒 '+item.bestTime+' · '+item.weather),
         el('div','activities-line','🚗 '+item.km+' km · '+item.driveMinutes+' min · '+(item.hoursVerified?'Hours checked':'Check hours')));
+    }
+    if(item.kind!=='ideas'&&URLSAFE(item.sourceUrl)){
+      const source=link('Source ↗',item.sourceUrl);source.className='activities-card-source';
+      source.addEventListener('click',e=>e.stopPropagation(),{signal});content.append(source);
     }
     article.append(photo,content);return article;
   }
