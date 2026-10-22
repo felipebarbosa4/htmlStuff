@@ -11,7 +11,7 @@ window.FinancePanel=(()=>{
  const statuses={active:'Ativo',review:'A revisar',paused:'Pausado',cancelled:'Cancelado'};
  const activeItem=item=>!['paused','cancelled'].includes(item.status);
  let view=null,within=()=>false,unlocked=false,lastActivity=0,expiresAt=0;
- let records=[],tab='overview',page=0,details=null,updatedAt='';
+ let records=[],notion=null,transactionKind='all',selectedMonth='',tab='overview',page=0,details=null,updatedAt='';
  const el=(tag,className,text)=>{
   const element=document.createElement(tag);
   if(className)element.className=className;
@@ -34,7 +34,7 @@ window.FinancePanel=(()=>{
  }
  function lock(){
   closeDetails();
-  unlocked=false;lastActivity=0;expiresAt=0;records=[];updatedAt='';
+  unlocked=false;lastActivity=0;expiresAt=0;records=[];notion=null;selectedMonth='';updatedAt='';
   if(view?.isConnected){
    const login=view.querySelector('#finance-login'),panel=view.querySelector('#finance-data');
    if(login)login.hidden=false;
@@ -183,6 +183,94 @@ window.FinancePanel=(()=>{
   next.addEventListener('click',()=>{touch();page++;renderContent();});
   right.append(prev,next);nav.append(right);content.append(nav);
  }
+
+ function dateLabel(date){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return 'Sem data';
+  const [year,month,day]=date.split('-');return day+'/'+month+'/'+year;
+ }
+ function snapshotStatus(){
+  if(!notion)return 'O histórico do Notion ainda não foi importado para esta tela.';
+  const stamp=notion.fetchedAt?new Date(notion.fetchedAt).toLocaleString('pt-BR',{timeZone:'America/Toronto'}):'data não disponível';
+  return 'Importação do Notion: '+stamp+'. Cópia histórica, não sincronização automática.';
+ }
+ function renderHistory(){
+  const content=view.querySelector('#finance-content');
+  const header=el('div','finance-section-header'),intro=el('div');
+  intro.append(el('h2','','Movimentos do Notion'),el('p','','Despesas, entradas e transferências · sem confundir com gastos fixos'));
+  header.append(intro);content.append(header);
+  if(!notion?.items?.length){content.append(el('p','finance-empty','Nenhum movimento do Notion disponível.'));return;}
+  const months=[...new Set(notion.items.filter(x=>/^\d{4}-\d{2}/.test(x.date||'')).map(x=>x.date.slice(0,7)))].sort().reverse();
+  if(!months.includes(selectedMonth))selectedMonth=months[0]||'';
+  const monthItems=notion.items.filter(x=>x.date?.startsWith(selectedMonth));
+  const exp=monthItems.filter(x=>x.kind==='expense').reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const inc=monthItems.filter(x=>x.kind==='income').reduce((sum,x)=>sum+Number(x.amount||0),0);
+  const metrics=el('div','finance-ledger-summary');
+  for(const [label,value] of [['Despesas do mês',exp],['Entradas do mês',inc],['Diferença (sem transferências)',inc-exp]]){
+   const box=el('div','finance-ledger-metric');box.append(el('span','',label),el('strong','',currency(value)));metrics.append(box);
+  }
+  content.append(metrics);
+  const controls=el('div','finance-ledger-controls');
+  const monthSelect=el('select');monthSelect.setAttribute('aria-label','Escolher mês');
+  for(const month of months){const opt=el('option','',month.slice(5)+'/'+month.slice(0,4));opt.value=month;monthSelect.append(opt);}
+  monthSelect.value=selectedMonth;
+  monthSelect.addEventListener('change',()=>{selectedMonth=monthSelect.value;page=0;touch();renderContent();});
+  const kindSelect=el('select');kindSelect.setAttribute('aria-label','Filtrar tipo de movimento');
+  for(const [key,name] of [['all','Todos os movimentos'],['expense','Despesas'],['income','Entradas'],['transfer','Transferências']]){
+   const option=el('option','',name);option.value=key;kindSelect.append(option);
+  }
+  kindSelect.value=transactionKind;
+  kindSelect.addEventListener('change',()=>{transactionKind=kindSelect.value;page=0;touch();renderContent();});
+  controls.append(monthSelect,kindSelect);content.append(controls);
+  const filtered=monthItems.filter(x=>transactionKind==='all'||x.kind===transactionKind);
+  const pageSize=window.innerHeight<850?4:6,totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+  page=Math.max(0,Math.min(page,totalPages-1));
+  const selected=filtered.slice(page*pageSize,(page+1)*pageSize);
+  if(!selected.length){content.append(el('p','finance-empty','Sem movimentos para este filtro.'));return;}
+  const table=el('table','finance-table finance-ledger-table'),thead=el('thead'),thr=el('tr');
+  for(const title of ['Data','Descrição / conta','Valor'])thr.append(el('th','',title));
+  thead.append(thr);table.append(thead);
+  const tbody=el('tbody');
+  for(const item of selected){
+   const tr=el('tr'),name=el('td'),title=el('div','finance-ledger-title',item.title);
+   title.title=item.title;
+   const detail=item.kind==='transfer'?'Transferência: '+item.account+' → '+(item.toAccount||'Outra conta'):
+    (item.kind==='income'?'Entrada · ':'Despesa · ')+(item.account||'Conta não informada');
+   name.append(title,el('div','finance-ledger-subtitle',detail));
+   tr.append(el('td','',dateLabel(item.date)),name,el('td','',currency(item.amount)));
+   tbody.append(tr);
+  }
+  table.append(tbody);content.append(table);
+  const nav=el('div','finance-pagination');
+  nav.append(el('span','',(page*pageSize+1)+'–'+(page*pageSize+selected.length)+' de '+filtered.length));
+  const right=el('div','finance-ledger-nav');
+  for(const [label,delta,disabled] of [['← Anterior',-1,page===0],['Próxima →',1,page>=totalPages-1]]){
+   const btn=el('button','',label);btn.disabled=disabled;
+   btn.addEventListener('click',()=>{page+=delta;touch();renderContent();});right.append(btn);
+  }
+  nav.append(right);content.append(nav);
+ }
+ function renderStatements(){
+  const content=view.querySelector('#finance-content');
+  const header=el('div','finance-section-header'),intro=el('div');
+  intro.append(el('h2','','Últimos extratos'),el('p','','Datas de fechamento diferentes · não são saldos bancários atuais'));
+  header.append(intro);content.append(header);
+  if(!notion?.statementBalances?.length){content.append(el('p','finance-empty','Ainda não há extratos importados.'));return;}
+  const grid=el('div','finance-balances');
+  for(const balance of notion.statementBalances){
+   const card=el('article','finance-balance');
+   const debt=balance.kind==='debt';
+   card.append(el('div','finance-stat-label',balance.name),
+    el('div','finance-balance-number',currency(balance.amount)),
+    el('div','finance-stat-sub',(debt?'Dívida':'Saldo')+' no extrato de '+dateLabel(balance.date)));
+   grid.append(card);
+  }
+  content.append(grid);
+  const reviews=notion.reviews||{};
+  const message=el('div','finance-review-note');
+  message.append(el('strong','','Conciliação pendente'),
+   el('p','',String(reviews.unclassifiedETransfers||0)+' e-Transfers sem finalidade confirmada. Lançamento recorrente de '+currency(reviews.unconfirmedRecurringCAD||0)+' não confirmado. Confira no Notion antes de classificar.'));
+  content.append(message);
+ }
  function renderContent(){
   if(!unlocked||!view?.isConnected||!within())return;
   closeDetails();
@@ -191,14 +279,17 @@ window.FinancePanel=(()=>{
    btn.setAttribute('aria-selected',String(selected));btn.tabIndex=selected?0:-1;
   }
   const content=view.querySelector('#finance-content');content.replaceChildren();
-  if(tab==='overview')renderOverview();else renderTable();
+  view.querySelector('#finance-summary').hidden=(tab==='history'||tab==='statements');
+  if(tab==='overview')renderOverview();else if(tab==='history')renderHistory();else if(tab==='statements')renderStatements();else renderTable();
   const activeCount=records.filter(activeItem).length,reviewCount=records.filter(x=>!x.confirmed&&activeItem(x)).length;
-  view.querySelector('#finance-note').textContent='Valores provisionados, não pagamentos efetuados. '+reviewCount+' de '+activeCount+' registros ainda precisam de conferência.';
+  view.querySelector('#finance-note').textContent=(tab==='history'||tab==='statements')?snapshotStatus()+' Transferências entre contas não são somadas como renda ou despesa.':'Valores provisionados, não pagamentos efetuados. '+reviewCount+' de '+activeCount+' registros ainda precisam de conferência.';
  }
  async function load(){
-  const data=await api('expenses');
+  const [data,history]=await Promise.all([api('expenses'),api('notion').catch(()=>null)]);
   if(!view?.isConnected||!within()||!unlocked)return;
   records=Array.isArray(data.items)?data.items:[];
+  notion=history&&Array.isArray(history.items)?history:null;
+  selectedMonth='';transactionKind='all';
   updatedAt=data.updatedAt||'';
   tab='overview';page=0;
   const essentialCount=records.filter(x=>x.category==='essential').length;
@@ -210,7 +301,7 @@ window.FinancePanel=(()=>{
  function mount(section,current){
   view=section;within=current;unlocked=false;records=[];page=0;tab='overview';
   section.classList.add('finance-view');
-  section.innerHTML='<div class="finance-shell"><div class="finance-top"><div><div class="finance-kicker">🔒 ÁREA PRIVADA</div><h1 class="finance-heading">Finanças da família</h1><p class="finance-caption">Contas fixas e assinaturas em um só lugar</p></div><button id="finance-lock" class="finance-lock" type="button" hidden>🔒 Bloquear</button></div><section id="finance-login" class="finance-login"><h2>Acesso protegido</h2><p class="finance-caption">Digite o código de 6 números para visualizar.</p><form id="finance-form"><label for="finance-pin">Código de acesso</label><div class="finance-pin-entry" id="finance-pin-entry"><div class="finance-pin-dots" aria-hidden="true"><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span></div><input id="finance-pin" class="finance-pin-input" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="6" pattern="[0-9]{6}" aria-label="PIN de seis dígitos" aria-describedby="finance-pin-help" required></div><p class="finance-pin-help" id="finance-pin-help">Toque nas bolinhas e digite o PIN. Acesso automático após 6 números.</p></form><p class="finance-error" role="alert" id="finance-error"></p><p class="finance-security">Os dados financeiros não ficam salvos no tablet.</p></section><div id="finance-data" hidden><div class="finance-summary" id="finance-summary"></div><nav class="finance-tabs" role="tablist" aria-label="Categorias das finanças"><button type="button" role="tab" class="finance-tab" data-finance-tab="overview" aria-selected="true">📊 Resumo</button><button type="button" role="tab" class="finance-tab" data-finance-tab="essential" aria-selected="false">🏠 Essenciais <span class="finance-count"></span></button><button type="button" role="tab" class="finance-tab" data-finance-tab="subscription" aria-selected="false">🔁 Assinaturas <span class="finance-count"></span></button></nav><div id="finance-content" class="finance-content" role="tabpanel"></div><div id="finance-note" class="finance-note"></div></div></div>';
+  section.innerHTML='<div class="finance-shell"><div class="finance-top"><div><div class="finance-kicker">🔒 ÁREA PRIVADA</div><h1 class="finance-heading">Finanças da família</h1><p class="finance-caption">Contas fixas e assinaturas em um só lugar</p></div><button id="finance-lock" class="finance-lock" type="button" hidden>🔒 Bloquear</button></div><section id="finance-login" class="finance-login"><h2>Acesso protegido</h2><p class="finance-caption">Digite o código de 6 números para visualizar.</p><form id="finance-form"><label for="finance-pin">Código de acesso</label><div class="finance-pin-entry" id="finance-pin-entry"><div class="finance-pin-dots" aria-hidden="true"><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span><span class="finance-pin-dot"></span></div><input id="finance-pin" class="finance-pin-input" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="6" pattern="[0-9]{6}" aria-label="PIN de seis dígitos" aria-describedby="finance-pin-help" required></div><p class="finance-pin-help" id="finance-pin-help">Toque nas bolinhas e digite o PIN. Acesso automático após 6 números.</p></form><p class="finance-error" role="alert" id="finance-error"></p><p class="finance-security">Os dados financeiros não ficam salvos no tablet.</p></section><div id="finance-data" hidden><div class="finance-summary" id="finance-summary"></div><nav class="finance-tabs" role="tablist" aria-label="Categorias das finanças"><button type="button" role="tab" class="finance-tab" data-finance-tab="overview" aria-selected="true">📊 Resumo</button><button type="button" role="tab" class="finance-tab" data-finance-tab="essential" aria-selected="false">🏠 Essenciais <span class="finance-count"></span></button><button type="button" role="tab" class="finance-tab" data-finance-tab="subscription" aria-selected="false">🔁 Assinaturas <span class="finance-count"></span></button><button type="button" role="tab" class="finance-tab" data-finance-tab="history" aria-selected="false">📋 Movimentos</button><button type="button" role="tab" class="finance-tab" data-finance-tab="statements" aria-selected="false">🏦 Extratos</button></nav><div id="finance-content" class="finance-content" role="tabpanel"></div><div id="finance-note" class="finance-note"></div></div></div>';
   const form=section.querySelector('#finance-form'),pinInput=section.querySelector('#finance-pin');
   const pinEntry=section.querySelector('#finance-pin-entry'),dots=[...section.querySelectorAll('.finance-pin-dot')];
   const error=section.querySelector('#finance-error');
