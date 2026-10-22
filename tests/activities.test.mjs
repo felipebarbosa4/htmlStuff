@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {onRequestPost,originPoint} from '../functions/api/activities/generate.js';
 import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
+import {ranges} from '../functions/api/activities/shared.js';
 
 test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo attribution and throttle', async()=>{
   const OriginalDate=global.Date;
@@ -55,7 +56,15 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     }
     if(uri==='https://oauth2.googleapis.com/token')return response({access_token:'test-token'});
     if(uri.includes('/calendar/v3/users/me/calendarList'))return response({items:[{id:'family',summary:'Family',accessRole:'reader'}]});
-    if(uri.includes('/calendar/v3/calendars/family/events'))return response({items:[]});
+    if(uri.includes('/calendar/v3/calendars/family/events'))return response({items:[
+      // This is an all-day event: it must never reserve the entire day.
+      {id:'all-day-family-note',summary:'Family reminder',status:'confirmed',
+        start:{date:'2026-10-20'},end:{date:'2026-10-21'}},
+      // Timed events must still block outings for their full duration.
+      {id:'timed-appointment',summary:'Appointment',status:'confirmed',
+        start:{dateTime:'2026-10-20T19:30:00Z'},
+        end:{dateTime:'2026-10-20T21:00:00Z'}}
+    ]});
     if(uri==='https://api.openai.com/v1/responses') {
       assert.equal(JSON.parse(options.body).model,'gpt-6-luna');
       assert.equal(JSON.parse(options.body).reasoning.effort,'none');
@@ -85,7 +94,10 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
       method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json','sec-fetch-site':'same-origin'},body:'{}'});
     const ctx={request,env};
     const generated=await onRequestPost(ctx);
-    assert.equal(generated.status,200,await generated.text().catch(()=>'')); // failure includes error details
+    assert.equal(generated.status,200,await generated.clone().text()); // preserve response body
+    const generatedData=await generated.json();
+    assert.ok(generatedData.items.every(x=>x.bestTime==='Leave at 5:00 PM'),
+      'all-day items must be ignored, but the 3:30–5:00 PM appointment must be avoided');
     const data=JSON.parse(values.get('family:activities:v1'));
     assert.equal(data.provider,'GPT-6 Luna');
     assert.equal(data.items.length,8);
@@ -136,4 +148,13 @@ test('geocoding errors identify the provider status without disclosing home or A
       });
     }
   }finally{global.fetch=oldFetch;}
+});
+
+test('all-day event ignored but timed appointment is a busy range',()=>{
+  const events=[
+    {allDay:true,start:'2026-10-20',end:'2026-10-21'},
+    {allDay:false,start:'2026-10-20T19:30:00Z',end:'2026-10-20T21:00:00Z'}
+  ];
+  assert.deepEqual(ranges(events,'2026-10-20'),[[930,1020]]);
+  assert.deepEqual(ranges([{allDay:true,start:'2026-10-20',end:'2026-10-21'}],'2026-10-20'),[]);
 });
