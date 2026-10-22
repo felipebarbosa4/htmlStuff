@@ -91,10 +91,10 @@ export function openingLabel(place) {
   if(!Array.isArray(hours?.weekdayDescriptions))return 'Hours unverified';
   return hours.weekdayDescriptions.join(' · ').slice(0,400);
 }
-export function scheduleFor(place,drive,date,earliest,busy,hours) {
+export function scheduleFor(place,drive,date,earliest,busy,hours,latest=1200) {
   const duration=place.category==='museum'?95:75;
   let best=null;
-  for(let t=earliest;t+2*drive+duration<=20*60;t+=30) {
+  for(let t=earliest;t+2*drive+duration<=latest;t+=30) {
     const arrival=t+drive,done=arrival+duration,home=done+drive;
     if(busy.some(([a,b])=>a<home&&b>t))continue;
     const open=openDuring(place.currentOpeningHours,date,arrival,done);
@@ -163,7 +163,9 @@ export async function onRequestPost(context) {
     if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
     await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(Date.now()),{expirationTtl:120});
     const now=local();
-    let targetDate=now.minute>=1200?addDay(now.date):now.date;
+    const latest=options.mode==='couple'?1410:options.mode==='visits'?1290:1200;
+    const cutoff=options.mode==='couple'?1320:options.mode==='visits'?1260:1200;
+    let targetDate=now.minute>=cutoff?addDay(now.date):now.date;
     const earliestFor=date=>{
       const day=local(new Date(date+'T12:00:00Z')).weekday;
       const minimum=options.kids>0&&!['Sat','Sun'].includes(day)?930:540;
@@ -183,7 +185,7 @@ export async function onRequestPost(context) {
     const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
       const route=distances.get(i);
       if(!route||route.km>MAX_KM||!Number.isFinite(route.minutes))return null;
-      const schedule=scheduleFor(p,route.minutes,date,earliest,blocked,weather);
+      const schedule=scheduleFor(p,route.minutes,date,earliest,blocked,weather,latest);
       if(!schedule)return null;
       return {id:p.id,name:p.displayName?.text||'Activity',category:p.category,
         address:p.formattedAddress||'',km:Math.round(route.km*10)/10,driveMinutes:route.minutes,
