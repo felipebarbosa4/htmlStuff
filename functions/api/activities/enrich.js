@@ -49,7 +49,7 @@ export function sanitizeEnrichment(item,validSources){
   const adult=free?0:number(money.adultCAD),child=free?0:number(money.childCAD);
   const includesAmount=n=>n!==null && (normalizedEvidence.includes(n.toFixed(2)) || new RegExp('(?:^|[^\d])'+String(n).replace('.','\\.')+'(?:[^\d]|$)').test(normalizedEvidence));
   const type=free?'free':includesAmount(adult)&&includesAmount(child)?'priced':'unverified';
-  return {highlights,animals,why,sourceUrl:source,
+  return {highlights,animals,why,locale:item.locale==='pt-BR'?'pt-BR':'',sourceUrl:source,
     admission:{type,adultCAD:type==='priced'?adult:null,childCAD:type==='priced'?child:null},
     checkedAt:new Date().toISOString()};
 }
@@ -65,6 +65,33 @@ export async function venueFacts(env,places,{research=false}={}){
   }));
   unique.forEach((p,i)=>{if(cached[i])results.set(p.id,cached[i]);});
   if(!research||!env.OPENAI_API_KEY)return results;
+  // v1 cache entries already have cited official facts/prices. Translate only
+  // their descriptive text; never pay for another web search or modify prices.
+  const older=unique.filter(p=>validStored(results.get(p.id))&&results.get(p.id).locale!=='pt-BR');
+  if(older.length){
+    try{
+      const source=older.map(p=>({id:p.id,highlights:results.get(p.id).highlights,
+        animals:results.get(p.id).animals,why:results.get(p.id).why}));
+      const data=await getJSON('https://api.openai.com/v1/responses',{
+        method:'POST',timeoutMs:16000,
+        headers:{'content-type':'application/json',authorization:'Bearer '+env.OPENAI_API_KEY},
+        body:JSON.stringify({model:'gpt-6-luna',reasoning:{effort:'none'},store:false,max_output_tokens:1200,
+          input:'Traduza fielmente para português brasileiro (pt-BR) os campos highlights, animals e why desta lista JSON. '+
+            'NÃO acrescente nem invente atrações, espécies ou fatos, NÃO altere IDs. '+
+            'Mantenha nomes próprios. Devolva só JSON no formato {"items":[{"id":"...","highlights":["..."],"animals":["..."],"why":"..."}]}. '+JSON.stringify(source)})
+      });
+      const parsed=parse(data),allowed=new Set(older.map(x=>x.id));
+      for(const row of Array.isArray(parsed.items)?parsed.items:[]){
+        if(!allowed.has(row?.id)||!Array.isArray(row.highlights)||!Array.isArray(row.animals)||typeof row.why!=='string')continue;
+        const prior=results.get(row.id);
+        if(row.highlights.length!==prior.highlights.length||row.animals.length!==prior.animals.length)continue;
+        const translated={...prior,highlights:row.highlights.map(x=>String(x).slice(0,72)),
+          animals:row.animals.map(x=>String(x).slice(0,42)),why:row.why.slice(0,170),locale:'pt-BR'};
+        results.set(row.id,translated);
+        try{await env.ACTIVITIES_KV.put(PREFIX+row.id,JSON.stringify(translated),{expirationTtl:TTL});}catch{}
+      }
+    }catch{/* Keep verified English descriptions if the translator is unavailable. */}
+  }
   const missing=unique.filter(p=>!results.has(p.id));
   const groups=Array.from({length:Math.ceil(missing.length/4)},(_,i)=>missing.slice(i*4,i*4+4));
   await Promise.all(groups.map(async group=>{
@@ -77,9 +104,11 @@ export async function venueFacts(env,places,{research=false}={}){
       'For free admission set free:true only with an explicit confirming source. If price is not published omit it. '+
       'For each venue return ONE official source URL containing the relevant facts. Do not invent attractions, animals or prices. '+
       'If you claim a price or free entry include admission.evidence (short copied price phrase from same official source). '+
+      'Write highlights, animals and why exclusively in natural Brazilian Portuguese (pt-BR), retaining proper nouns. '+
+      'Keep numeric prices and their evidence in the original source language. Set locale to pt-BR. '+
       'You MUST search the web, not your memory. Return ONLY JSON: '+
-      '{"items":[{"id":"listed-id","sourceUrl":"https://...","highlights":["specific activity 1","specific activity 2"],'+
-      '"animals":["verified animal type"],"why":"short visitor-friendly reason",'+
+      '{"items":[{"id":"listed-id","sourceUrl":"https://...","locale":"pt-BR","highlights":["atividade específica 1","atividade específica 2"],'+
+      '"animals":["espécie confirmada"],"why":"motivo curto para visitar",'+
       '"admission":{"adultCAD":null,"childCAD":null,"free":false,"evidence":""}}]}. '+
       'Venues: '+JSON.stringify(group.map(x=>({id:x.id,name:x.name,category:x.category})));
     try{
@@ -123,6 +152,6 @@ export function priceDisplay(info,adults=2,kids=0){
 export function factsDisplay(record,adults=2,kids=0){
   const info=validStored(record)?record:null;
   return {highlights:info?.highlights||[],animals:info?.animals||[],
-    why:info?.why||'',sourceUrl:info?.sourceUrl||'',checkedAt:info?.checkedAt||'',
+    why:info?.why||'',factsLocale:info?.locale||'',sourceUrl:info?.sourceUrl||'',checkedAt:info?.checkedAt||'',
     price:priceDisplay(info,adults,kids)};
 }

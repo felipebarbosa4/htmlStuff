@@ -17,6 +17,25 @@ const trailerId=url=>{
 };
 const el=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
 const dayLabel=s=> /^\d{4}-\d{2}-\d{2}$/.test(s||'')?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,weekday:'short',month:'short',day:'numeric'}).format(new Date(s+'T12:00:00Z')):'Selected day';
+const dayLabelPt=s=> /^\d{4}-\d{2}-\d{2}$/.test(s||'')?
+  new Intl.DateTimeFormat('pt-BR',{timeZone:TZ,weekday:'short',day:'numeric',month:'short'}).format(new Date(s+'T12:00:00Z')):'dia selecionado';
+const clockPt=s=>String(s||'').replace(/\b(1[0-2]|0?[1-9]):([0-5]\d)\s*(AM|PM)\b/gi,(_m,h,m,period)=>{
+  const hour=(Number(h)%12)+(period.toUpperCase()==='PM'?12:0);
+  return hour+'h'+(m==='00'?'':m);
+});
+const dayHoursPt=s=>clockPt(String(s||'Horário não confirmado')
+  .replace(/Opening hours unverified|Hours unverified/gi,'Horário não confirmado')
+  .replace(/Closed on selected day[^/]*/gi,'Fechado na data selecionada')
+  .replace(/Open 24 hours/gi,'Aberto 24 horas')
+  .replace(/Hours for that date unavailable[^/]*/gi,'Horário indisponível para esta data'));
+const departurePt=s=>clockPt(String(s||'').replace(/^Leave at /,'Sair às ')
+  .replace(/^No confirmed slot right now.*$/i,'Sem horário confirmado agora — atualize as ideias')
+  .replace(/^Refresh Ideas.*$/i,'Atualize as ideias para conferir o horário'));
+const weatherPt=s=>String(s||'').replace(/rain\s*/gi,'chuva ').replace(/Forecast unavailable/gi,'Previsão indisponível');
+const moneyPt=n=>'C$ '+new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const admissionPt=p=>p?.perPerson===0?'Entrada gratuita (confirmada)':
+  Number.isFinite(p?.perPerson)?'≈ '+moneyPt(p.perPerson)+'/pessoa (ingresso)':'Ingresso não confirmado';
+
 const watchNames=x=>(Array.isArray(x)?x:[]).join(', ');
 const stamp=s=>{const t=Date.parse(s);return Number.isFinite(t)?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(t):'Not generated'};
 const fmt=()=>{
@@ -74,13 +93,18 @@ window.ActivitiesPanel={
       const rows=available>=570?3:available>=280?2:1;
       return columns*rows;
     }
-    // More practical facts/price lines need readable tall cards.
+    if(state.kind==='ideas'){
+      // Two columns by two rows on tablets. Small landscape phone views
+      // gracefully fall back rather than clipping the 7 information lines.
+      return window.innerWidth>=740&&available>=320?4:available>=200?2:1;
+    }
     return available<240?1:2;
   }
   function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode):
     '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+'&maxKm='+state.maxKm;}
   function controls(){
     root.classList.toggle('activities-movies',state.kind==='movies');
+    root.classList.toggle('activities-ideas',state.kind==='ideas');
     for(const b of root.querySelectorAll('[data-mode-choice]'))b.classList.toggle('selected',b.dataset.modeChoice===state.mode);
     for(const b of root.querySelectorAll('[data-env]'))b.classList.toggle('selected',b.dataset.env===state.environment);
     for(const b of root.querySelectorAll('[data-kind]')){
@@ -243,19 +267,18 @@ window.ActivitiesPanel={
       '🔍 Source: '+(item.provider||'Event feed')+' · '+(item.ageRestriction||'Age suitability unverified'),
       '📚 Event listings: Has Things, ODbL 1.0 (for feed listings).'
     ]:[
-      '📍 '+(item.address||'Location unverified'),
-      '🚗 '+item.km+' km · '+item.driveMinutes+' min from home',
-      '🕒 '+item.bestTime+' · '+(item.hoursVerified?'Hours checked':'Hours unverified'),
-      '🌤 '+item.weather,
-      '🎒 Bring: '+item.bring,
-      '✨ '+item.reason,
-      '✨ What to do: '+(item.highlights?.length?item.highlights.join(' · '):'Specific activities not yet independently verified'),
-      '🐾 Animals: '+(item.animals?.length?item.animals.join(', '):'No species confirmed'),
-      '💡 Why go: '+(item.why||item.reason||'See official venue information'),
-      '💰 Average admission: '+(item.price?.label||'Admission unverified')+
-        (item.price?.estimatedTotal!=null?' · Estimated group C$'+item.price.estimatedTotal.toFixed(2):''),
-      '🏪 Hours for '+dayLabel(item.hoursDate)+': '+(item.hoursToday||'Opening hours unverified'),
-      '⏰ Weekly listing: '+item.openingHours
+      '📍 '+(item.address||'Endereço não confirmado'),
+      '🚗 '+item.km+' km · '+item.driveMinutes+' min de carro',
+      '🕒 '+departurePt(item.bestTime)+' · '+(item.hoursVerified?'Funcionamento conferido':'Horário não confirmado'),
+      '🌤 '+weatherPt(item.weather),
+      '🎒 Levar: '+item.bring,
+      '✨ O que fazer: '+(item.highlights?.length?item.highlights.join(' · '):'Atividades ainda não confirmadas'),
+      '🐾 Animais: '+(item.animals?.length?item.animals.join(', '):'Espécies não confirmadas'),
+      '💡 Por que ir: '+(item.why||item.reason||'Confira o local'),
+      '💰 Ingresso médio: '+admissionPt(item.price)+
+        (item.price?.estimatedTotal!=null?' · Total estimado: '+moneyPt(item.price.estimatedTotal):''),
+      '🏪 Funcionamento em '+dayLabelPt(item.hoursDate)+': '+dayHoursPt(item.hoursToday),
+      'ℹ Horários publicados não garantem disponibilidade de atividades ou ingressos.'
     ];
     lines.forEach(x=>panel.append(el('p','',x)));
     const actions=el('div','activities-modal-actions');
@@ -268,7 +291,7 @@ window.ActivitiesPanel={
     if(item.kind==='ideas'){
       if(URLSAFE(item.website))actions.append(link('🌐 Website / admission',item.website));
       if(URLSAFE(item.mapsUrl))actions.append(link('Google Maps',item.mapsUrl));
-      if(URLSAFE(item.sourceUrl))actions.append(link('📖 Admission / activities source',item.sourceUrl));
+      if(URLSAFE(item.sourceUrl))actions.append(link('📖 Fonte das atividades e ingressos',item.sourceUrl));
     }else if(URLSAFE(item.sourceUrl)){
       actions.append(link(item.kind==='movies'?'🎬 TMDB details':'🔗 Event source',item.sourceUrl));
       if(item.kind==='events'&&URLSAFE(item.ticketUrl))actions.append(link('🎟 Tickets / organizer',item.ticketUrl));
@@ -283,10 +306,10 @@ window.ActivitiesPanel={
       }
     }
     if(item.kind==='ideas'){
-      const note=el('p','activities-modal-tip','Help What to Do learn your preferences.');
+      const note=el('p','activities-modal-tip','Ajude o What to Do a aprender suas preferências.');
       panel.append(note);
       const group=el('div','activities-feedback');
-      for(const [value,label] of [['like','♡ Like'],['dislike','✕ Not interested'],['visited','✓ Visited']]){
+      for(const [value,label] of [['like','♡ Gostei'],['dislike','✕ Sem interesse'],['visited','✓ Já visitei']]){
         const b=el('button','',label);b.type='button';
         b.addEventListener('click',()=>feedback(item,value,status),{signal});group.append(b);
       }
@@ -300,7 +323,8 @@ window.ActivitiesPanel={
     }
     const close=el('button','activities-close','Close');close.type='button';
     close.addEventListener('click',closeModal,{signal});actions.append(close);
-    panel.append(actions,el('p','activities-modal-tip','Check official opening hours, tickets and prices before leaving.'));
+    panel.append(actions,el('p','activities-modal-tip',item.kind==='ideas'?
+      'Confira os horários, ingressos e preços oficiais antes de sair.':'Check official opening hours, tickets and prices before leaving.'));
     backdrop.append(panel);
     backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal();},{signal});
     document.body.append(backdrop);state.modal=backdrop;close.focus();
@@ -342,12 +366,12 @@ window.ActivitiesPanel={
         el('div','activities-line',item.reason||'See the organizer'));
     }else{
       content.append(el('div','activities-line activities-idea-feature',
-          '✨ '+(item.highlights?.length?item.highlights.slice(0,2).join(' · '):'Attractions not yet confirmed')));
-      content.append(el('div','activities-line','💡 '+(item.why||item.reason||'See visitor information')));
+        '✨ '+(item.highlights?.length?item.highlights.slice(0,2).join(' · '):'Atividades não confirmadas')));
+      content.append(el('div','activities-line','💡 '+(item.why||item.reason||'Confira as atrações')));
       if(item.animals?.length)content.append(el('div','activities-line','🐾 '+item.animals.join(', ')));
-      content.append(el('div','activities-line','🕒 '+item.bestTime+' · '+item.weather),
-        el('div','activities-line','🏪 '+dayLabel(item.hoursDate)+': '+(item.hoursToday||'Hours unverified')),
-        el('div','activities-line activities-idea-price','💰 '+(item.price?.label||'Admission unverified')),
+      content.append(el('div','activities-line','🕒 '+departurePt(item.bestTime)+' · '+weatherPt(item.weather)),
+        el('div','activities-line','🏪 '+dayLabelPt(item.hoursDate)+': '+dayHoursPt(item.hoursToday)),
+        el('div','activities-line activities-idea-price','💰 '+admissionPt(item.price)),
         el('div','activities-line','🚗 '+item.km+' km · '+item.driveMinutes+' min · 🎒 '+item.bring));
     }
     if(item.kind==='events'&&URLSAFE(item.sourceUrl)){
@@ -360,14 +384,17 @@ window.ActivitiesPanel={
     if(!active())return;
     controls();fit();grid.replaceChildren();
     const arr=state.items,pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
-    const movieColumns=state.kind==='movies'&&window.innerWidth>=740?2:1;
-    grid.style.gridTemplateColumns='repeat('+movieColumns+',minmax(0,1fr))';
+    const columns=((state.kind==='movies'||state.kind==='ideas')&&window.innerWidth>=740&&
+      (state.kind==='movies'||grid.getBoundingClientRect().height>=200))?2:1;
+    grid.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
     state.page=Math.max(0,Math.min(max-1,state.page));
     const visibleItems=arr.slice(state.page*pageSizeNow,(state.page+1)*pageSizeNow);
     // Previously the CSS always reserved FOUR rows even if we rendered just
     // 1–2 cards, leaving empty rows and compressing the visible cards into
     // very thin strips on Safari/iPad. Allocate rows only to visible cards.
-    grid.style.gridTemplateRows='repeat('+Math.max(1,state.kind==='movies'?Math.ceil(visibleItems.length/movieColumns):Math.max(visibleItems.length,grid.getBoundingClientRect().height>=300?2:1))+',minmax(0,1fr))';
+    const rows=state.kind==='movies'||state.kind==='ideas'?
+      Math.ceil(visibleItems.length/columns):Math.max(visibleItems.length,grid.getBoundingClientRect().height>=300?2:1);
+    grid.style.gridTemplateRows='repeat('+Math.max(1,rows)+',minmax(0,1fr))';
     if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
     else if(!arr.length)message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
       'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
@@ -380,6 +407,8 @@ window.ActivitiesPanel={
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
     meta.textContent=(last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
       (state.kind==='movies'&&arr.length?' · '+arr.length+' verified movie'+(arr.length===1?'':'s')+(arr.length<9?' (fewer than 9 confirmed)':''):'')+
+      (state.kind==='ideas'&&arr.length&&state.snapshot?.locale!=='pt-BR'?
+        ' · Atualize para sugestões em português':'')+
       (state.error&&arr.length?' · '+state.error:'');
   }
   async function load(){

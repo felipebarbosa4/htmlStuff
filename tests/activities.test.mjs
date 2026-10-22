@@ -81,14 +81,15 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
         const source='https://www.ottawa.ca/parks/admission';
         return response({output:[{type:'web_search_call',action:{sources:[{url:source}]}},{type:'message',content:[{type:'output_text',
           text:JSON.stringify({items:listed.map(x=>({id:x.id,sourceUrl:source,
-            highlights:['Play outdoors','Explore gardens'],animals:['goats'],why:'Explore this public place',
+            highlights:['Brincar ao ar livre','Explorar jardins'],animals:['cabras'],why:'Explore este espaço público',locale:'pt-BR',
             admission:{free:false,adultCAD:10,childCAD:5,evidence:'Adult C$10.00 Child C$5.00 admission'}}))})}]}]});
       }
       assert.equal(body.reasoning.effort,'none');
+      assert.match(input,/Brazilian Portuguese \(pt-BR\)/);
       assert.ok(!input.includes('Test Place'), 'Do not send Google Places data to AI for category ranking');
       const categories=['park','indoor','museum','recreation','library','animals'];
       return response({output:[{type:'message',content:[{type:'output_text',
-        text:JSON.stringify({categories,notes:Object.fromEntries(categories.map(cat=>[cat,{bring:'Water, jacket',why:'Fun for two kids'}]))})}]}]});
+        text:JSON.stringify({categories,notes:Object.fromEntries(categories.map(cat=>[cat,{bring:'Água e casaco',why:'Passeio divertido para as crianças'}]))})}]}]});
     }
     if(uri.includes('/media?maxWidthPx=720'))return response({photoUri:'https://lh3.googleusercontent.com/demo'});
     if(uri.startsWith('https://places.googleapis.com/v1/places/place_')) {
@@ -115,6 +116,8 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
       'all-day items must be ignored, but the 3:30–5:00 PM appointment must be avoided');
     const data=JSON.parse(values.get('family:activities:v2:family'));
     assert.equal(data.provider,'GPT-6 Luna');
+    assert.equal(data.locale,'pt-BR');
+    assert.ok(data.items.every(x=>x.bring.includes('Água')));
     assert.equal(data.items.length,8);
     assert.ok(data.items.every(x=>x.id && x.category && x.bring && x.reason));
     assert.ok(data.items.every(x=>!x.name&&!x.address&&!x.km&&!x.rating&&!x.openingHours),
@@ -123,7 +126,8 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     assert.ok(!JSON.stringify(data).includes(env.HOME_ADDRESS));
     assert.equal(calls.filter(x=>x==='https://api.openai.com/v1/responses').length,3,'AI ranking plus two uncached web searches');
     assert.equal(generatedData.items[0].price.estimatedTotal,30);
-    assert.ok(generatedData.items[0].highlights.includes('Play outdoors'));
+    assert.ok(generatedData.items[0].highlights.includes('Brincar ao ar livre'));
+    assert.equal(generatedData.items[0].factsLocale,'pt-BR');
     const pref=await savePreference({request:new Request('https://dashboard.example.org/api/activities/feedback',{
       method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
       body:JSON.stringify({mode:'family',id:data.items[0].id,category:data.items[0].category,value:'visited'})
@@ -448,4 +452,40 @@ test('Kids Yes/No overrides legacy family counts without changing adult defaults
   assert.equal(normalizeOptions({mode:'family',kidsYes:true,kids:0}).kids,2);
   assert.equal(normalizeOptions({mode:'family',kidsYes:false}).adults,2);
   assert.equal(normalizeOptions({mode:'visits',kidsYes:true}).adults,4);
+});
+
+test('cached venue descriptions are translated once on Refresh without re-researching ticket prices',async()=>{
+  const oldFetch=global.fetch,cache=new Map(),calls=[];
+  const id='place_cache_1',source='https://ottawa.ca/en/parks/visitor-info';
+  const old={highlights:['Walk through gardens'],animals:['goats'],why:'A lovely place to spend the afternoon',
+    sourceUrl:source,admission:{type:'priced',adultCAD:18,childCAD:7},checkedAt:'2026-10-21T18:00:00Z'};
+  cache.set('family:activities:verified-venue:v1:'+id,JSON.stringify(old));
+  const env={OPENAI_API_KEY:'secret',ACTIVITIES_KV:{
+    get:async(k,f)=>{const v=cache.get(k);return f==='json'&&v?JSON.parse(v):v||null;},
+    put:async(k,v)=>cache.set(k,v)
+  }};
+  global.fetch=async(url,opts={})=>{
+    calls.push(String(url));
+    const body=JSON.parse(opts.body);
+    assert(!body.tools,'Translation must not pay for a web search');
+    assert.match(body.input,/português brasileiro/);
+    return new Response(JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({items:[{
+      id,highlights:['Passear pelos jardins'],animals:['cabras'],why:'Uma ótima opção para a tarde'
+    }]})}]}]}),{status:200});
+  };
+  try{
+    const first=await venueFacts(env,[{id,name:'Example Venue',category:'park'}],{research:true});
+    const fact=first.get(id);
+    assert.equal(fact.locale,'pt-BR');
+    assert.deepEqual(fact.animals,['cabras']);
+    assert.equal(fact.admission.adultCAD,18);
+    assert.equal(fact.sourceUrl,source);
+    assert.equal(priceDisplay(fact,2,2).estimatedTotal,50);
+    assert.equal(calls.length,1);
+    const read=await venueFacts(env,[{id}],{research:false});
+    assert.equal(read.get(id).why,'Uma ótima opção para a tarde');
+    assert.equal(calls.length,1);
+    await venueFacts(env,[{id,name:'Example Venue',category:'park'}],{research:true});
+    assert.equal(calls.length,1,'Translated cache stays valid without new AI calls');
+  }finally{global.fetch=oldFetch;}
 });

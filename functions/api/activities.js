@@ -55,8 +55,8 @@ export async function onRequestGet(context) {
       const bestTime=slot?'Leave at '+hourText(slot.t):'No confirmed slot right now — Refresh Ideas';
       return {
         id:x.id,name:data.displayName.text,category:x.category||'Activity',
-        bring:typeof x.bring==='string'?x.bring:'Water and weather-appropriate layers',
-        reason:typeof x.reason==='string'?x.reason:'Family-friendly experience',
+        bring:typeof x.bring==='string'?x.bring:'Água e roupas adequadas ao clima',
+        reason:typeof x.reason==='string'?x.reason:'Passeio em família',
         address:data.formattedAddress||'',km:Math.round(route.km*10)/10,
         driveMinutes:route.minutes,website:data.websiteUri||'',mapsUrl:data.googleMapsUri||'',
         openingHours:openingLabel(data),hoursToday:hoursForDate(data.currentOpeningHours,saved.date).label,
