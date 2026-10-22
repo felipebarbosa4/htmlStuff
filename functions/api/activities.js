@@ -42,13 +42,14 @@ export async function onRequestGet(context) {
     }
     const weekday=local(new Date(saved.date+'T12:00:00Z')).weekday;
     const school=!['Sat','Sun'].includes(weekday);
-    const earliest=saved.date===now.date?Math.max(now.minute+15,school?930:540):school?930:540;
+    const night=Boolean(saved.options?.nightMode)&&saved.date===now.date;
+    const earliest=saved.date===now.date?Math.max(now.minute+15,night?0:school?930:540):school?930:540;
     const items=known.map((x,i)=>{
       const data=details[i],route=matrix.get(i);
-      if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||route.km>MAX_KM)return null;
-      const latest=saved.options?.mode==='couple'?1410:saved.options?.mode==='visits'?1290:1200;
-      const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather,latest):null;
-      const bestTime=slot?'Leave at '+hourText(slot.t):'Refresh Ideas for a current time';
+      if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||route.km>(saved.options?.maxKm||MAX_KM))return null;
+      const latest=night?1440:saved.options?.mode==='couple'?1410:saved.options?.mode==='visits'?1290:1200;
+      const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather,latest,night):null;
+      const bestTime=slot?'Leave at '+hourText(slot.t):'Refresh Ideas to recheck availability';
       return {
         id:x.id,name:data.displayName.text,category:x.category||'Activity',
         bring:typeof x.bring==='string'?x.bring:'Water and weather-appropriate layers',
