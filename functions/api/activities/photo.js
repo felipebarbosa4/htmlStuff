@@ -11,7 +11,7 @@ export async function onRequestGet({request,env}) {
     const saved=await env.ACTIVITIES_KV.get(keyFor(mode),'json');
     if(!saved?.items?.some(x=>x.id===id))return json({error:'Place is not in your saved recommendations'},404);
     const data=await getJSON('https://places.googleapis.com/v1/places/'+encodeURIComponent(id),{
-      headers:{'X-Goog-Api-Key':env.GOOGLE_MAPS_API_KEY,'X-Goog-FieldMask':'photos,attributions'}
+      headers:{'X-Goog-Api-Key':env.GOOGLE_MAPS_API_KEY,'X-Goog-FieldMask':'photos'}
     });
     const photo=data.photos?.[0];
     if(!photo?.name)return json({error:'This place has no available photo'},404);
@@ -20,7 +20,7 @@ export async function onRequestGet({request,env}) {
     });
     if(!/^https:\/\//.test(media.photoUri||''))return json({error:'Invalid photo media URL'},502);
     const credits=(photo.authorAttributions||[]).map(x=>({name:String(x.displayName||'Photographer').slice(0,80),
-      uri:/^https:\/\//.test(x.uri||'')?x.uri:''})).slice(0,4);
+      uri:/^https:\/\//.test(x.uri||'')?x.uri:/^\/\/maps\.google\.com/.test(x.uri||'')?'https:'+x.uri:''})).slice(0,4);
     return json({url:media.photoUri,credits,sourceUrl:/^https:\/\//.test(photo.googleMapsUri||'')?photo.googleMapsUri:''});
-  }catch{return json({error:'Photo temporarily unavailable'},502);}
+  }catch(e){return json({error:'Google photo service unavailable ('+(String(e.message||'').match(/HTTP \d{3}/)?.[0]||'network issue')+')'},502);}
 }
