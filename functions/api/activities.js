@@ -46,7 +46,8 @@ export async function onRequestGet(context) {
     const items=known.map((x,i)=>{
       const data=details[i],route=matrix.get(i);
       if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||route.km>MAX_KM)return null;
-      const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather):null;
+      const latest=saved.options?.mode==='couple'?1410:saved.options?.mode==='visits'?1290:1200;
+      const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather,latest):null;
       const bestTime=slot?'Leave at '+hourText(slot.t):'Refresh Ideas for a current time';
       return {
         id:x.id,name:data.displayName.text,category:x.category||'Activity',
