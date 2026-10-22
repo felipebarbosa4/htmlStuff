@@ -28,10 +28,9 @@ export function hourText(minutes) {
 export function ranges(events,targetDate) {
   const busy=[];
   for(const e of events||[]) {
-    if(e.allDay) {
-      if(e.start<=targetDate && targetDate<e.end) busy.push([0,1440]);
-      continue;
-    }
+    // Family Dash What to Do: all-day calendar entries are informational,
+    // not blockers. Only events with actual start/end times reserve time.
+    if(e.allDay) continue;
     const start=new Date(e.start),end=new Date(e.end||e.start);
     if(!Number.isFinite(start.valueOf())||!Number.isFinite(end.valueOf()))continue;
     const a=local(start),b=local(end);
