@@ -1,10 +1,11 @@
 import {json,getJSON,local} from './shared.js';
 import {normalizeOptions,validOrigin,safeSource} from './config.js';
 import {originPoint} from './generate.js';
+import {tmdbMovies,hasThingsEvents,movieCredit,eventCredit} from './providers.js';
 
-// Events and film releases are researched from open web references, never
-// Google Places content. Each user-requested refresh incurs a web-search call.
-const CACHE_PREFIX='family:activities:discovery:v1:';
+// Only the optional events fallback invokes OpenAI web_search.
+// Movies exclusively use TMDB; normal events use the open Has Things feed.
+const CACHE_PREFIX='family:activities:discovery:v2:';
 const keyword=(kind,mode,maxKm=20)=>CACHE_PREFIX+kind+':'+mode+(kind==='events'?':'+maxKm+'km':'');
 function parsedResponse(data){
   const text=(data.output||[]).flatMap(x=>(x.content||[]).filter(y=>y.type==='output_text').map(y=>y.text)).join('\n')
@@ -128,23 +129,45 @@ export async function onRequestGet({request,env}){
 }
 export async function onRequestPost({request,env}){
   if(!validOrigin(request))return json({error:'Same-origin dashboard request required'},403);
-  if(!env.OPENAI_API_KEY||!env.ACTIVITIES_KV)return json({error:'OpenAI and KV configuration required'},503);
+  if(!env.ACTIVITIES_KV)return json({error:'Activities KV storage is required'},503);
   try{
     const input=await request.json(),kind=input.kind==='movies'?'movies':'events';
     const opts=normalizeOptions(input),now=local();
+    if(kind==='movies'&&!env.TMDB_API_KEY)return json({error:'TMDB_API_KEY missing. Add your TMDB API Read Access Token in Cloudflare Production secrets.'},503);
     const key=keyword(kind,opts.mode,opts.maxKm),limit=key+':last-request';
     const last=Number(await env.ACTIVITIES_KV.get(limit)||0);
     if(Date.now()-last<90000)return json({error:'Please wait before another discovery refresh'},429);
     await env.ACTIVITIES_KV.put(limit,String(Date.now()),{expirationTtl:120});
-    let items=await research(env,kind,opts,now);
-    if(kind==='events'){
-      if(!env.GOOGLE_MAPS_API_KEY||!env.HOME_ADDRESS)throw Error('Maps integration required for event distance verification');
-      items=await verifyEventDistances(env,items,opts.maxKm);
+    let items=[],fallbackUsed=false,feedFailed=false;
+    if(kind==='movies'){
+      items=await tmdbMovies(env,opts,now);
+    }else{
+      try{items=await hasThingsEvents(env,opts,now);}
+      catch{feedFailed=true;}
+      // When the structured city feed cannot provide 3 verified events,
+      // supplement with cited OpenAI web search. Never forward feed/TMDB data to AI.
+      if(items.length<3&&env.OPENAI_API_KEY){
+        try{
+          const extra=await verifyEventDistances(env,await research(env,'events',opts,now),opts.maxKm);
+          const seen=new Set(items.map(x=>x.name.toLowerCase()+'|'+x.date));
+          for(const x of extra){
+            const id=x.name.toLowerCase()+'|'+x.date;
+            if(!seen.has(id)&&items.length<8){items.push({...x,provider:'OpenAI web search'});seen.add(id);}
+          }
+          fallbackUsed=extra.length>0;
+        }catch{
+          // Preserve valid feed events even if a paid fallback fails.
+        }
+      }
+      items.sort((a,b)=>a.time.localeCompare(b.time)||a.km-b.km);
+      if(feedFailed&&!items.length)
+        throw Error('Ottawa event feed and verified fallback are temporarily unavailable');
     }
     const saved={kind,mode:opts.mode,maxKm:opts.maxKm,generatedAt:new Date().toISOString(),
-      month:now.date.slice(0,7),date:now.date,items,disclaimer:kind==='movies'?
-        'Canada release dates, not confirmed local showtimes. Check cinemas before booking.':
-        'Organizer times may change. Distance checked by road; verify the official event page.'};
+      month:now.date.slice(0,7),date:now.date,items,sourceCredit:kind==='movies'?movieCredit:eventCredit,
+      fallbackUsed,disclaimer:kind==='movies'?
+        'TMDB Canada theatrical dates and ratings; local showtimes not verified. TMDB does not endorse this app.':
+        'Data: Has Things (ODbL 1.0). Other events may come from cited OpenAI web search. Recheck organizers and child suitability.'};
     await env.ACTIVITIES_KV.put(key,JSON.stringify(saved),{expirationTtl:kind==='movies'?35*86400:2*86400});
     return json(saved);
   }catch(e){return json({error:String(e?.message||'Research failed').slice(0,160)},502);}
