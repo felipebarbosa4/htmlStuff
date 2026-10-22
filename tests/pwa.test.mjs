@@ -22,7 +22,7 @@ test('installable Android manifest uses the dashboard path and fullscreen',()=>{
 });
 test('correct viewport, manifest, and icon are linked',()=>{
  assert.match(html,/viewport-fit=cover/);
- assert.match(html,/rel="manifest" href="\/family-dashboard\/manifest.webmanifest"/);
+ assert.match(html,/rel="manifest" href="\/family-dashboard\/manifest.webmanifest" crossorigin="use-credentials"/);
  assert.match(html,/rel="icon" sizes="192x192"/);
  assert.match(html,/serviceWorker\.register\('\/family-dashboard\/sw\.js'/);
 });
