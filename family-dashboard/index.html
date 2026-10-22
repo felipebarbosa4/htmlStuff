@@ -73,8 +73,30 @@ const MANUAL_DURATION=30*60*1000;
 function parts(){const s=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',weekday:'short',month:'short',day:'numeric'}).formatToParts(new Date());return Object.fromEntries(s.filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));}
 // Collection eve 20:00–00:00; collection morning 08:45–10:00.
 // Clothes retain priority 08:00–08:45 on collection days and 08:00–08:50 otherwise.
-// Brazilian lunch suggestions every day 11:30–12:00 (Ottawa local time).
-function which(p){const min=Number(p.hour)*60+Number(p.minute);if(typeof window!=='undefined'&&window.WastePanel?.slot(p))return 'waste';if(min>=1320||min<360)return 'night';if(min>=480&&min<530)return 'weather';if(min>=690&&min<720)return 'meals';return 'calendar';}
+// Brazilian lunch suggestions: 11:30–13:00, unless a timed appointment
+// overlaps 11:30–13:00 or starts precisely at 13:00. Calendar wins on uncertainty.
+const LUNCH_START=690,LUNCH_END=780;
+const lunchCalendar={date:'',verifiedAt:0,hasConflict:true,loading:false,nextAttemptAt:0};
+const lunchClockParts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+function lunchLocalMinute(value){
+ const time=new Date(value);
+ if(!Number.isFinite(time.getTime()))return '';
+ const a=Object.fromEntries(lunchClockParts.formatToParts(time).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+ return a.year+'-'+a.month+'-'+a.day+'T'+a.hour+':'+a.minute;
+}
+function lunchConflicts(events,date){
+ const from=date+'T11:30',through=date+'T13:00';
+ return events.some(e=>{
+  if(e.allDay || !e.start)return false; // Birthdays and other all-day entries should not hide lunch.
+  const start=lunchLocalMinute(e.start),end=lunchLocalMinute(e.end||e.start);
+  return Boolean(start&&end&&start<=through&&(end>from || (start===end && start>=from)));
+ });
+}
+function lunchIsVerifiedFree(){
+ return lunchCalendar.date===ottawaDate()&&!lunchCalendar.hasConflict&&
+  lunchCalendar.verifiedAt>0&&Date.now()-lunchCalendar.verifiedAt<15*60*1000;
+}
+function which(p){const min=Number(p.hour)*60+Number(p.minute);if(typeof window!=='undefined'&&window.WastePanel?.slot(p))return 'waste';if(min>=1320||min<360)return 'night';if(min>=480&&min<530)return 'weather';if(min>=690&&min<780)return lunchIsVerifiedFree()?'meals':'calendar';return 'calendar';}
 function setUI(mode){
 const el=document.getElementById('stage');
 if(mode==='activities' && activitiesSavedView){
@@ -105,6 +127,42 @@ function ottawaDate(){
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
  const p=Object.fromEntries(parts.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
  return p.year+'-'+p.month+'-'+p.day;
+}
+// Check the Google Calendar before lunch and throughout lunch, without persisting
+// private event details in storage. Fail closed to Calendar on errors or partial results.
+async function refreshLunchCalendar(p){
+ const minute=Number(p.hour)*60+Number(p.minute);
+ if(minute<675 || minute>=LUNCH_END)return; // preflight starts at 11:15
+ const date=ottawaDate(),now=Date.now();
+ if(lunchCalendar.date!==date){
+  lunchCalendar.date=date;lunchCalendar.verifiedAt=0;
+  lunchCalendar.hasConflict=true;lunchCalendar.nextAttemptAt=0;
+ }
+ if(lunchCalendar.loading||now<lunchCalendar.nextAttemptAt)return;
+ lunchCalendar.loading=true;
+ lunchCalendar.nextAttemptAt=now+5*60*1000;
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
+ try{
+  const response=await fetch('/api/calendar?date='+encodeURIComponent(date),{
+   credentials:'same-origin',cache:'no-store',redirect:'manual',signal:controller.signal
+  });
+  if(response.type==='opaqueredirect'||!response.ok||
+     !response.headers.get('content-type')?.includes('application/json'))
+    throw new Error('Calendar is not accessible');
+  const data=await response.json();
+  if(data.date!==date||data.partial||!Array.isArray(data.events))
+    throw new Error('Calendar could not be fully verified');
+  if(ottawaDate()!==date)return;
+  lunchCalendar.hasConflict=lunchConflicts(data.events,date);
+  lunchCalendar.verifiedAt=Date.now();
+ }catch{
+  // An expired login or incomplete calendar must not hide a possible appointment.
+  lunchCalendar.hasConflict=true;lunchCalendar.verifiedAt=0;
+  lunchCalendar.nextAttemptAt=Date.now()+60*1000;
+ }finally{
+  clearTimeout(timer);lunchCalendar.loading=false;
+  if(manual==='auto')render();
+ }
 }
 function eventTime(date){
  const d=new Date(date);
@@ -272,6 +330,7 @@ function render(){
  document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';
  if(manual!=='auto'&&now>=manualUntil){manual='auto';manualUntil=0;}
  refreshDaily(p);
+ refreshLunchCalendar(p);
  const selected=manual==='auto'?which(p):manual;
  if(selected!==visible){if(visible==='finance'&&window.FinancePanel)FinancePanel.lock();visible=selected;setUI(selected);}
  if(window.FinancePanel)FinancePanel.tick(now);

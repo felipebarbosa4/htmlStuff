@@ -39,7 +39,7 @@ test('main screen avoids fixed 100vh iframe and enables dynamic viewport',()=>{
  assert.match(html,/overflow:hidden/);
 });
 test('automatic slots and 15s refresh are unchanged',()=>{
- assert.match(html,/min>=690&&min<720\)return 'meals'/);
+ assert.match(html,/min>=690&&min<780\)return lunchIsVerifiedFree\(\)\?'meals':'calendar'/);
  assert.match(html,/min>=480&&min<530\)return 'weather'/);
  assert.match(html,/setInterval\(render,15000\);render\(\)/);
 });
