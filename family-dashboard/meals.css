@@ -32,3 +32,22 @@ body:has(.meals-mount) #stage{min-height:0;overflow:hidden}
 @media(max-height:490px){.meal-photo{height:32%}.meals-today{display:none}.meal-card p{display:none}.meal-ingredients span{-webkit-line-clamp:3}.meals-header h1{font-size:23px}}
 @media(max-width:780px){.meals-header p{display:none}.meal-card-info{padding:8px}.meal-card h2{font-size:14px}.meal-ingredients span{font-size:11px}.meals-source{display:none}.meals-manage{font-size:11px;padding:9px}}
 @media(max-width:620px) and (min-height:600px){.meal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.meal-card h2{font-size:14px}.meal-photo{height:35%;min-height:40px}.meal-ingredients span{-webkit-line-clamp:2}}
+
+/* Swipeable lunch cards: four fit across a tablet, additional dishes slide sideways. */
+.meal-grid{
+ display:flex;align-items:stretch;flex:1 1 auto;min-width:0;min-height:0;
+ overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;
+ overscroll-behavior-x:contain;touch-action:pan-x;-webkit-overflow-scrolling:touch;
+ scrollbar-width:none;
+}
+.meal-grid::-webkit-scrollbar{display:none}
+.meal-grid>.meal-card{
+ flex:0 0 calc((100% - 3 * clamp(8px,1.2vw,15px)) / 4);
+ min-width:0;height:100%;scroll-snap-align:start
+}
+.meals-swipe{font-size:clamp(11px,1.2vw,15px);font-weight:800;color:#8eeadd;white-space:nowrap}
+.meals-range{color:#d9edf7;font-weight:700;margin-left:6px}
+.meal-grid:focus-visible{outline:2px solid #73eadb;outline-offset:-2px;border-radius:12px}
+@media(max-width:620px) and (min-height:600px){
+ .meal-grid>.meal-card{flex-basis:calc((100% - clamp(8px,1.2vw,15px)) / 2)}
+}
