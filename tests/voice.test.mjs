@@ -39,10 +39,10 @@ test('agenda helper filters all-day, invalid, and past entries',()=>{
  assert.deepEqual(items.map(x=>x.title),['Soon','School']);
 });
 test('voice module integrates without changing dashboard auto scheduling or PWA cache policy',()=>{
- assert.match(html,/voice\.css\?v=voice-v1/);
- assert.match(html,/type="module" src="\/family-dashboard\/voice\.mjs\?v=voice-v1"/);
+ assert.match(html,/voice\.css\?v=fire-fallback-v2/);
+ assert.match(html,/type="module" src="\/family-dashboard\/voice\.mjs\?v=fire-fallback-v2"/);
  assert.match(html,/window\.familyDashboardVoice=Object\.freeze/);
- assert.match(html,/\['auto','weather','calendar','night','activities','waste','meals'\]/);
+ assert.match(html,/\['auto','weather','calendar','night','activities','waste','meals'(?:,'todos')?\]/);
  assert.match(html,/setInterval\(render,15000\);render\(\)/);
  assert.match(html,/min>=690&&min<780\)return lunchIsVerifiedFree\(\)\?'meals':'calendar'/);
  assert.doesNotMatch(html,/familyDashboardVoice[\s\S]{0,130}finance/);

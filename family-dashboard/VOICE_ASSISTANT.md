@@ -1,5 +1,31 @@
 # Hey Family — voz no tablet (PWA)
 
+## Amazon Fire Tablet (Fully Kiosk) — modo alternativo de voz
+
+O Fire OS pode exibir "Google speech engine can't be found" mesmo com permissão
+de microfone. No Fire, o dashboard agora pode usar o microfone WebRTC (getUserMedia)
+em vez da SpeechRecognition dependente de serviços Google.
+
+1. Atualize a página no Fully Kiosk e toque no botão 🎙️.
+2. Leia o aviso e toque em **Ativar voz online (pago)**.
+3. Autorize a captura do microfone e diga "Hey Family" ou "Ei família".
+4. A detecção de atividade sonora funciona localmente, **mas NÃO reconhece as
+   palavras offline**: cada trecho com volume de voz é transcrito pela OpenAI,
+   mesmo antes de reconhecer a frase de ativação. Em casa com conversas/TV, isso
+   aumenta custos e pode esgotar o limite diário.
+5. O painel somente responde quando uma transcrição começa com a palavra de ativação.
+   A resposta falada, nesta modalidade, usa TTS por IA via Cloudflare/OpenAI.
+6. Se aparecer um erro de `getUserMedia`, verifique Fully Kiosk > Web Content
+   Settings > Enable Microphone Access e a permissão de microfone do app no Fire OS.
+7. Em segundo plano, a captura é encerrada. Ela não funciona com a tela apagada.
+   Para escuta permanente de baixo custo será necessário um detector local nativo.
+
+Nesta versão existe limite aproximado de 120 trechos por dia e 6 por minuto,
+usando a KV existente. **Os limites KV não são um teto financeiro rígido.**
+Áudio e transcrições não são armazenados pelo dashboard; áudio é enviado à
+OpenAI para ser processado. O endpoint /api/voice/transcribe só aceita WAV.
+A voz de resposta é **gerada por IA, não humana**.
+
 ## Como ativar
 
 1. Abra o dashboard instalado no Chrome do tablet Samsung com a tela ligada.
@@ -12,7 +38,7 @@ Também é possível dizer "Hey Family, abra o calendário" em uma única frase.
 
 ## Como funciona
 
-- **Ativação e STT:** a implementação inicial utiliza Web Speech API (SpeechRecognition / webkitSpeechRecognition). O Chrome pode enviar áudio para um serviço de reconhecimento; não é um detector local offline. Em certas versões do Android, o serviço termina a escuta automaticamente, por isso tentamos reiniciá-lo enquanto o aplicativo estiver ativo.
+- **Ativação e STT:** a implementação inicial utiliza Web Speech API (SpeechRecognition / webkitSpeechRecognition) quando disponível e modo Fire via getUserMedia + transcrição na API quando necessário. O Chrome pode enviar áudio para um serviço de reconhecimento; não é um detector local offline. Em certas versões do Android, o serviço termina a escuta automaticamente, por isso tentamos reiniciá-lo enquanto o aplicativo estiver ativo.
 - **Perguntas:** comandos simples são tratados localmente. Perguntas gerais enviam apenas a transcrição final ao endpoint de primeira parte `/api/voice`, que consulta a API de IA usando o secret `OPENAI_API_KEY` de Cloudflare. Esse secret nunca vai para o cliente. Não é enviada gravação de áudio ao endpoint próprio.
 - **TTS:** SpeechSynthesisUtterance do navegador com `lang=pt-BR`; a qualidade depende das vozes instaladas no tablet.
 - **Privacidade:** o botão de voz inicia desativado; não persistimos áudio, transcrições ou conversas no navegador. Somente o consentimento da ativação pode ser preservado durante a sessão para tentar reconectar após a atualização automática do PWA. Desligar apaga essa preferência.

@@ -9,3 +9,9 @@
 .family-voice-message strong{display:block;color:#95eadf;font-size:13px;margin-bottom:2px}
 .family-voice-message[hidden]{display:none}
 @media(max-height:470px){.family-voice{right:8px;bottom:7px}.family-voice-toggle{width:38px;height:38px;font-size:17px}.family-voice-message{max-height:65px;padding:5px 9px;font-size:11px}}
+
+.family-voice-cloud-consent{display:block;margin-top:9px;background:#73eadb;color:#062a2b;border:0;border-radius:8px;padding:8px 10px;font:700 12px system-ui;cursor:pointer}
+.family-voice-cloud-consent[hidden]{display:none}
+
+.family-voice-message.cloud-approval{max-height:220px;max-width:min(390px,calc(100vw - 86px));overflow:visible}
+.family-voice-message.cloud-approval .family-voice-cloud-consent{width:100%;touch-action:manipulation}
