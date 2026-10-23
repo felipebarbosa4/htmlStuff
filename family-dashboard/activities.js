@@ -544,7 +544,7 @@ window.ActivitiesPanel={
       content.append(el('div','activities-line','💡 '+(item.why||item.reason||'Confira as atrações')));
       if(item.animals?.length)content.append(el('div','activities-line','🐾 '+item.animals.join(', ')));
       content.append(el('div','activities-line','🕒 '+departurePt(item.bestTime)+' · '+weatherPt(item.weather)),
-        el('div','activities-line','🏪 '+dayLabelPt(item.hoursDate)+': '+dayHoursPt(item.hoursToday)),
+        el('div','activities-line',(item.hoursVerified?'✅ ':'⚠️ ')+dayLabelPt(item.hoursDate)+': '+dayHoursPt(item.hoursToday)),
         el('div','activities-line activities-idea-price','💰 '+admissionPt(item.price)),
         el('div','activities-line','🚗 '+item.km+' km · '+item.driveMinutes+' min · 🎒 '+item.bring));
     }
@@ -578,12 +578,12 @@ window.ActivitiesPanel={
       panel.style.gridTemplateColumns='minmax(0,1fr)';
       panel.style.gridTemplateRows='minmax(0,1fr)';
       track.append(panel);
-      if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
+      if(state.busy)message('Procurando sugestões próximas…','Verificando distância por estrada, horários, previsão do tempo e compromissos da família.');
       else if(state.kind==='ideas'&&state.items.length&&!arr.length){
         message('Nenhum local até '+state.maxKm+' km nesta lista',
           'As sugestões salvas estão fora do raio escolhido. Use Refresh Ideas para pesquisar novos locais até '+state.maxKm+' km.');
-      }else message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
-        'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
+      }else message(state.error?'Não foi possível gerar passeios agora':'Ainda não há sugestões salvas',
+        state.error?'Você pode tentar novamente quando o timer permitir ou usar At Home.':'Toque em Refresh Ideas para buscar atividades. Não fazemos buscas automaticamente.');
     }else{
       for(let start=0;start<arr.length;start+=pageSizeNow){
         const pageItems=arr.slice(start,start+pageSizeNow);

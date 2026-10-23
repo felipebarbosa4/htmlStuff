@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {onRequestPost,originPoint,scheduleFor,isNight,eligibleNightCategory} from '../functions/api/activities/generate.js';
+import {onRequestPost,originPoint,scheduleFor,isNight,eligibleNightCategory,nearbyPlaces} from '../functions/api/activities/generate.js';
 import {onRequestGet} from '../functions/api/activities.js';
 import {onRequestGet as photoGet} from '../functions/api/activities/photo.js';
 import {ranges} from '../functions/api/activities/shared.js';
@@ -643,4 +643,98 @@ test('Ideas and Events throttling include a numeric Retry-After and exact second
  const info=await event.json();
  assert(info.retryAfterSeconds>=59&&info.retryAfterSeconds<=61);
  assert.equal(event.headers.get('Retry-After'),String(info.retryAfterSeconds));
+});
+
+
+test('couple + 10 km at lunchtime recovers real nearby cafés and parks, verified hours and road radius',async()=>{
+  const FixedDate=global.Date,originalFetch=global.fetch;
+  const instant=FixedDate.parse('2026-10-23T16:09:00Z'); // 12:09 in Ottawa EDT
+  global.Date=class extends FixedDate{
+    constructor(...args){super(...(args.length?args:[instant]));}
+    static now(){return instant;}
+  };
+  const calls=[],store=new Map(),now='2026-10-23';
+  let emptyText=false;
+  const ok=data=>new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}});
+  const opening=(start=9,end=21)=>({periods:[{open:{date:{year:2026,month:10,day:23},hour:start,minute:0},
+    close:{date:{year:2026,month:10,day:23},hour:end,minute:0}}],weekdayDescriptions:['Friday: 9:00 AM – 9:00 PM']});
+  const nearby={food:[['near_cafe',10,45.39],['near_bakery',11,45.391],['near_dessert',12,45.392]],
+    park:[['near_park',5,45.395],['near_garden',6,45.394]],
+    indoor:[['near_bowling',15,45.396],['near_art',8,45.397]]};
+  const points=Object.fromEntries(Object.values(nearby).flat().map(([id,d,lat])=>[id,{id,
+    displayName:{text:'Local real '+id},location:{latitude:lat,longitude:-75.7},
+    businessStatus:'OPERATIONAL',rating:4.6,userRatingCount:80,
+    currentOpeningHours:opening(id==='near_dessert'?15:9),distanceKm:d}]));
+  // No location names or home address are emitted to the public API except
+  // proper Google Places venue data. The test's place records are mocked.
+  const env={HOME_ADDRESS:'PRIVATE_HOME',GOOGLE_MAPS_API_KEY:'fake',OPENAI_API_KEY:'fake',
+    GOOGLE_CLIENT_ID:'test',GOOGLE_CLIENT_SECRET:'test',GOOGLE_REFRESH_TOKEN:'test',
+    ACTIVITIES_KV:{get:async(k,f)=>{let v=store.get(k);return f==='json'&&v?JSON.parse(v):v||null;},put:async(k,v)=>store.set(k,v)}};
+  global.fetch=async(url,options={})=>{
+    url=String(url);calls.push(url);
+    if(url.includes('geocode/json'))return ok({status:'OK',results:[{geometry:{location:{lat:45.4,lng:-75.7}}}]});
+    if(url.includes('open-meteo.com')){
+      const time=[],temp=[],rain=[],wind=[];
+      for(const day of [now,'2026-10-24'])for(let h=0;h<24;h++){
+        time.push(day+'T'+String(h).padStart(2,'0')+':00');temp.push(9);rain.push(5);wind.push(5);
+      }
+      return ok({hourly:{time,temperature_2m:temp,precipitation_probability:rain,wind_speed_10m:wind}});
+    }
+    if(url.includes('places:searchText')){
+      const input=JSON.parse(options.body);
+      assert(!/Ottawa|Ontario|Barrhaven/i.test(input.textQuery),'Short radius should not override the home location bias');
+      if(emptyText)return ok({places:[]});
+      return ok({places:[{id:'downtown_only',displayName:{text:'Downtown distant'},
+        location:{latitude:45.5,longitude:-75.6},businessStatus:'OPERATIONAL',
+        currentOpeningHours:opening()}]});
+    }
+    if(url.includes('places:searchNearby')){
+      const body=JSON.parse(options.body);
+      assert.equal(body.rankPreference,'DISTANCE');
+      assert.equal(body.locationRestriction.circle.radius,10000);
+      assert.equal(body.locationRestriction.circle.center.latitude,45.4);
+      const type=body.includedTypes[0];
+      const cat=type==='cafe'?'food':type==='park'?'park':'indoor';
+      return ok({places:(nearby[cat]||[]).map(([id])=>points[id])});
+    }
+    if(url.includes('distanceMatrix/v2:computeRouteMatrix')){
+      const ids=JSON.parse(options.body).destinations.map(x=>x.waypoint.placeId);
+      return ok(ids.map((id,i)=>({originIndex:0,destinationIndex:i,condition:'ROUTE_EXISTS',
+        distanceMeters:id==='downtown_only'?17400:(points[id]?.distanceKm||18)*1000,
+        duration:'600s'})));
+    }
+    if(url.includes('/oauth2.googleapis.com/token')||url.includes('oauth2.googleapis.com/token'))return ok({access_token:'fake'});
+    if(url.includes('/calendar/v3/users/me/calendarList'))return ok({items:[{id:'family',summary:'Family',accessRole:'reader'}]});
+    if(url.includes('/calendar/v3/calendars/family/events'))return ok({items:[]});
+    if(url.includes('api.openai.com'))throw Error('Simulated OpenAI outage: preserve verified local Places');
+    throw Error('Unexpected endpoint: '+url);
+  };
+  try{
+    const response=await onRequestPost({request:new Request('https://dashboard.example.org/api/activities/generate',{
+      method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
+      body:JSON.stringify({mode:'couple',maxKm:10,budget:'any',environment:'all',kidsYes:false})}),env});
+    assert.equal(response.status,200,await response.clone().text());
+    const data=await response.json();
+    assert.equal(data.date,'2026-10-23');
+    assert(data.items.length>=3,'Near local businesses should be recommended after downtown text search fails');
+    assert(data.items.every(x=>x.km<=10),'Actual driving km must be enforced, even for Nearby Search');
+    assert(!data.items.some(x=>x.id==='downtown_only'||x.id==='near_bowling'||x.id==='near_bakery'||x.id==='near_dessert'));
+    assert(data.items.some(x=>x.category==='food'));
+    assert(data.items.some(x=>x.category==='park'));
+    assert(data.items.every(x=>x.departureMinute>=12*60+24),'Time of search must not be ignored');
+    assert(data.items.every(x=>x.hoursVerified===true),'Opening times known and verified at the suggested slot');
+    assert.equal(data.provider,'Google Places · seleção local','Return verified data if OpenAI is unavailable');
+    assert.equal(data.items[0].hoursDate,now);
+    assert.equal(data.options.maxKm,10);
+    assert(calls.some(x=>x.includes('places:searchNearby')));
+    emptyText=true;
+    store.delete('family:activities:v1:last-request');
+    const second=await onRequestPost({request:new Request('https://dashboard.example.org/api/activities/generate',{
+      method:'POST',headers:{origin:'https://dashboard.example.org','content-type':'application/json'},
+      body:JSON.stringify({mode:'couple',maxKm:10,budget:'any',environment:'all'})}),env});
+    assert.equal(second.status,200,await second.clone().text());
+    const localOnly=await second.json();
+    assert(localOnly.items.length>=3,'Nearby Search should rescue even empty Text Search');
+    assert(localOnly.items.every(x=>x.km<=10&&x.hoursVerified));
+  }finally{global.fetch=originalFetch;global.Date=FixedDate;}
 });

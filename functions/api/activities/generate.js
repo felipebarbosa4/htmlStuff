@@ -71,10 +71,16 @@ async function findPlaces(key,origin,options,night=false) {
       culture:'late night live entertainment music shows open late Ottawa Ontario',
       recreation:'late night indoor recreation bowling billiards Ottawa Ontario'
     }[category]:null;
+    // Specific city words in Text Search can override its geographic bias.
+    // For 5/10km searches use local category terms; the circle stays centered
+    // at home, and road-distance verification is still mandatory.
+    const wideQuery=nightQuery||(adultsOnly?adultQueries[category]:query);
+    const textQuery=options.maxKm<=10?
+      wideQuery.replace(/\b(Ottawa|Ontario|Barrhaven|Nepean)\b/gi,'').replace(/\s+/g,' ').trim():wideQuery;
     const r=await getJSON('https://places.googleapis.com/v1/places:searchText',{
       method:'POST',
       headers:{'content-type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':fieldMask},
-      body:JSON.stringify({textQuery:nightQuery||(adultsOnly?adultQueries[category]:query),languageCode:'en',pageSize:12,
+      body:JSON.stringify({textQuery,languageCode:'en',pageSize:12,
         locationBias:{circle:{center:{latitude:origin.lat,longitude:origin.lng},radius:options.maxKm*1000}}})
     });
     return (r.places||[]).filter(p=>p.id&&p.location&&p.businessStatus!=='CLOSED_PERMANENTLY')
@@ -83,9 +89,63 @@ async function findPlaces(key,origin,options,night=false) {
   const dedup=new Map();
   for(const result of results)if(result.status==='fulfilled')for(const p of result.value)
     if(!dedup.has(p.id))dedup.set(p.id,p);
-  if(!dedup.size)throw Error('No matching verified places from Google Places');
+  // Nearby Search can still find truly local venues if Text Search returns
+  // no matches or a regional key rejects broad text queries.
   return [...dedup.values()].slice(0,45);
 }
+// Text Search uses a *bias*, not a hard area restriction. For short-range
+// requests that found too few valid outings, Nearby Search uses a real circle
+// around the private home coordinates (which are never sent to OpenAI).
+// Google's permitted Places types and searchNearby schema are documented at
+// https://developers.google.com/maps/documentation/places/web-service/nearby-search
+const NEARBY_TYPES={
+  couple:[
+    ['food',['cafe','bakery','dessert_shop','restaurant']],
+    ['park',['park','garden','botanical_garden']],
+    ['indoor',['bowling_alley','art_gallery','movie_theater']]
+  ],
+  family:[
+    ['park',['park','playground','garden']],
+    ['food',['cafe','bakery','dessert_shop']],
+    ['indoor',['bowling_alley','indoor_playground','movie_theater']]
+  ],
+  visits:[
+    ['park',['park','garden','tourist_attraction']],
+    ['food',['cafe','restaurant','bakery']],
+    ['museum',['museum','art_gallery','historical_place']]
+  ]
+};
+export async function nearbyPlaces(key,origin,options,night=false,excludedIds=[]) {
+  const allowed=new Set(CATEGORY_SETS[options.mode].map(([cat])=>cat));
+  const used=new Set(excludedIds);
+  const categories=NEARBY_TYPES[options.mode]
+    .filter(([cat])=>allowed.has(cat))
+    .filter(([cat])=>options.environment==='all'||(OUTDOOR.has(cat)?'outdoor':'indoor')===options.environment)
+    .filter(([cat])=>options.budget!=='free'||FREE_CANDIDATES.has(cat))
+    .filter(([cat])=>!night||eligibleNightCategory(cat));
+  // 3 capped requests; never search farther away to fill the grid.
+  const near=await Promise.allSettled(categories.map(async ([category,includedTypes])=>{
+    const data=await getJSON('https://places.googleapis.com/v1/places:searchNearby',{
+      method:'POST',
+      headers:{'content-type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':fieldMask},
+      body:JSON.stringify({includedTypes,languageCode:'en',maxResultCount:20,
+        rankPreference:'DISTANCE',locationRestriction:{circle:{center:{
+          latitude:origin.lat,longitude:origin.lng},radius:Math.min(50000,options.maxKm*1000)}}})
+    });
+    return (data.places||[]).filter(x=>x.id&&x.location&&x.businessStatus!=='CLOSED_PERMANENTLY')
+      .map(x=>({...x,category}));
+  }));
+  // Interleave categories so 20 cafes can't crowd every park off the list.
+  const perCategory=near.map(r=>r.status==='fulfilled'?r.value:[]);
+  const result=[];
+  for(let i=0;i<20&&result.length<36;i++)for(const group of perCategory){
+    const p=group[i];if(p&&!used.has(p.id)){
+      used.add(p.id);result.push(p);
+    }
+  }
+  return result;
+}
+
 export async function routes(key,origin,places) {
   const data=await getJSON('https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix',{
     method:'POST',
@@ -212,7 +272,11 @@ export async function onRequestPost(context) {
       return json({error:'No verified free nighttime venues in this category set. Select another budget.'},422);
     const [home,firstBusy]=await Promise.all([originPoint(env),agendaFor(targetDate)]);
     const [weather,places]=await Promise.all([forecast(home),findPlaces(env.GOOGLE_MAPS_API_KEY,home,options,night)]);
-    const distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);
+    let distances=new Map();
+    if(places.length){
+      try{distances=await routes(env.GOOGLE_MAPS_API_KEY,home,places);}
+      catch{/* Retry verified routing on local Nearby candidates below. */}
+    }
     const makePool=(date,earliest,blocked)=>places.map((p,i)=>{
       const route=distances.get(i);
       if(!route||route.km>options.maxKm||!Number.isFinite(route.minutes))return null;
@@ -226,9 +290,24 @@ export async function onRequestPost(context) {
         hoursDate:date,hoursVerified:schedule.hoursVerified,
         bestTime:'Leave at '+hourText(schedule.t),departureMinute:schedule.t,weather:schedule.weather,
         penalty:schedule.penalty,attributions:(p.attributions||[]).map(x=>({provider:x.provider||'',uri:x.providerUri||''})),
-        score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty};
+        score:(Number(p.rating)||3.5)*3 + Math.log10(1+(p.userRatingCount||0)) - route.km*0.23 -schedule.penalty+
+          (schedule.hoursVerified?8:0)};
     }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,26);
     let pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
+    if(options.maxKm<=20&&pool.length<4){
+      // Give short-range searches a second, strictly local chance. Important
+      // when an Ottawa-wide text query favors downtown over nearby places.
+      // Weather, calendar, verified road radius and business hours still apply.
+      const nearby=await nearbyPlaces(env.GOOGLE_MAPS_API_KEY,home,options,night,places.map(x=>x.id));
+      if(nearby.length){
+        let newRoutes=new Map();
+        try{newRoutes=await routes(env.GOOGLE_MAPS_API_KEY,home,nearby);}
+        catch{/* Cannot claim a driving distance without Google Routes. */}
+        const offset=places.length;
+        nearby.forEach((p,i)=>{places.push(p);if(newRoutes.has(i))distances.set(i+offset,newRoutes.get(i));});
+        pool=makePool(targetDate,earliestFor(targetDate),firstBusy);
+      }
+    }
     if(!night && pool.length===0 && targetDate===now.date) {
       // If it is too late for a realistic outing, use tomorrow's free hours
       // without charging again for Places/Routes searches.
@@ -236,9 +315,17 @@ export async function onRequestPost(context) {
       const nextPool=makePool(tomorrow,earliestFor(tomorrow),tomorrowBusy);
       if(nextPool.length>pool.length){targetDate=tomorrow;pool=nextPool;}
     }
-    if(!pool.length)throw Error(night?'No indoor activities confirmed open for enough time tonight within '+options.maxKm+' km. Try another distance or tomorrow.':'No suitable places with verified driving distances and available slots');
-    const choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
-      .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[],options,counts);
+    if(!pool.length)throw Error(night?
+      'Não encontrei locais com abertura confirmada nesta noite até '+options.maxKm+' km. Tente Indoor, outro raio ou At Home.':
+      'Não foi possível confirmar um local com trajeto e horário compatíveis até '+options.maxKm+' km. Confira outro horário, raio ou At Home.');
+    // A temporary AI outage must not discard legitimate, Google-verified
+    // nearby places: the model selects themes but is not a venue database.
+    let choice;
+    try{choice=await selectWithAI(env,targetDate,weather.filter(x=>x.time.startsWith(targetDate) && Number(x.time.slice(11,13))*60>=earliestFor(targetDate)-30).slice(0,12)
+      .map(x=>x.time.slice(11,16)+' '+Math.round(x.temp)+'°C/'+x.rain+'% rain').join('; '),earliestFor(targetDate),targetDate===now.date?firstBusy:[],options,counts);}
+    catch{
+      choice={categories:[...new Set(pool.map(x=>x.category))],notes:{},provider:'Google Places · seleção local'};
+    }
     // Feedback is authoritative: exclude places marked Not interested; de-prioritize
     // visited ones. Likes receive priority without sharing place IDs with OpenAI.
     const feedbackById=new Map(history.filter(x=>x.mode===options.mode).map(x=>[x.id,x.value]));
@@ -262,13 +349,17 @@ export async function onRequestPost(context) {
         ids.push(id);categoryCount.set(cat,count+1);
       }
     }
-    const facts=await venueFacts(env,ids.map(id=>byId.get(id)),{research:true});
+    let facts=new Map();
+    try{facts=await venueFacts(env,ids.map(id=>byId.get(id)),{research:true});}
+    catch{/* Admission and extra attractions remain clearly unverified. */}
     const items=ids.map(id=>{
       const p=byId.get(id);if(!p)return null;
       const note=choice.notes[p.category]||{};
       const {score,penalty,...publicPlace}=p;
       return {...publicPlace,...factsDisplay(facts.get(id),options.adults,options.kids),bring:typeof note.bring==='string'?note.bring.slice(0,100):'Água e roupas adequadas ao clima',
-        reason:typeof note.why==='string'?note.why.slice(0,140):'Passeio para aproveitar em família'};
+        reason:typeof note.why==='string'?note.why.slice(0,140):
+          options.mode==='couple'?'Uma experiência a dois em um local próximo':
+          options.mode==='visits'?'Um lugar interessante para apresentar às visitas':'Um passeio para aproveitar em família'};
     }).filter(Boolean);
     const result={date:targetDate,generatedAt:new Date().toISOString(),provider:choice.provider,
       items,coverage:items.length,timezone:ZONE,locale:'pt-BR',options:{...options,nightMode:night}};
