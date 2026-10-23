@@ -14,7 +14,9 @@ export async function onRequestGet(context) {
   const {env,request}=context;
   if(!env.ACTIVITIES_KV)return json({error:'Activities storage is not configured.'},503);
   try {
-    const mode=normalizeOptions({mode:new URL(request.url).searchParams.get('mode')}).mode;
+    const query=new URL(request.url).searchParams;
+    const mode=normalizeOptions({mode:query.get('mode')}).mode;
+    const requestedMaxKm=query.has('maxKm')?normalizeOptions({maxKm:query.get('maxKm')}).maxKm:null;
     const saved=await env.ACTIVITIES_KV.get(keyFor(mode),'json');
     if(!saved||!Array.isArray(saved.items)||!saved.items.length)
       return json({items:[],generatedAt:null,provider:null,date:null});
@@ -46,10 +48,14 @@ export async function onRequestGet(context) {
     const school=!['Sat','Sun'].includes(weekday) && (saved.options?.kids||0)>0;
     const night=Boolean(saved.options?.nightMode)&&saved.date===now.date;
     const earliest=saved.date===now.date?Math.max(now.minute+15,night?0:school?930:0):school?930:0;
+    // Respect both the chosen radius AND the original saved radius; widening
+    // requires an explicit Refresh (old search never considered farther places).
+    const savedMaxKm=normalizeOptions({maxKm:saved.options?.maxKm}).maxKm;
+    const effectiveMaxKm=Math.min(savedMaxKm,requestedMaxKm??savedMaxKm);
     const facts=await venueFacts(env,known,{research:false});
     const items=known.map((x,i)=>{
       const data=details[i],route=matrix.get(i);
-      if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||route.km>(saved.options?.maxKm||MAX_KM))return null;
+      if(!data?.displayName?.text||data.businessStatus==='CLOSED_PERMANENTLY'||!route||!Number.isFinite(route.km)||route.km<0||route.km>effectiveMaxKm)return null;
       const latest=night?1440:saved.options?.mode==='couple'?1410:saved.options?.mode==='visits'?1290:1200;
       const slot=busy&&weather?scheduleFor({...data,category:x.category},route.minutes,saved.date,earliest,busy,weather,latest,night):null;
       const bestTime=slot?'Leave at '+hourText(slot.t):'No confirmed slot right now — Refresh Ideas';
@@ -66,7 +72,7 @@ export async function onRequestGet(context) {
         attributions:(data.attributions||[]).map(p=>({provider:p.provider||'',uri:p.providerUri||''}))
       };
     }).filter(Boolean);
-    return json({...saved,items,coverage:items.length});
+    return json({...saved,items,coverage:items.length,requestedMaxKm:requestedMaxKm??savedMaxKm,effectiveMaxKm});
   } catch {
     return json({error:'Could not load the current Google Maps details for saved activities. Try again later.'},502);
   }
