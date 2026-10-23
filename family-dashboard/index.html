@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="/family-dashboard/waste.css?v=ottawa-waste-next-v1">
 <link rel="stylesheet" href="/family-dashboard/meals.css?v=swipe-20261022">
 <link rel="stylesheet" href="/family-dashboard/voice.css?v=voice-v1">
+<link rel="stylesheet" href="/family-dashboard/todos.css?v=1">
 <style>
 :root{font-family:system-ui,-apple-system,Arial,sans-serif;color:#eef6ff;background:#091424}*{box-sizing:border-box}html,body{margin:0;min-height:100%;}body{display:flex;flex-direction:column;min-height:100vh}.top{padding:12px 18px;display:flex;gap:16px;align-items:center;justify-content:space-between;border-bottom:1px solid #344660;background:#12243b;flex-wrap:wrap}.brand{font-size:18px;font-weight:800}.small{color:#adc0d5;font-size:14px}.controls{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.controls button{border:1px solid #53728e;color:#d4e8ff;background:#1e3552;padding:9px 12px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}.controls button.current{color:#062323;background:#73eadb;border-color:#73eadb}#stage{position:relative;flex:1;min-height:65vh}#frame{width:100%;height:calc(100vh - 74px);border:0;background:#091424}.view{padding:clamp(20px,4vw,52px);max-width:1200px;margin:auto}.big{font-size:clamp(33px,6vw,70px);margin:10px 0}.card{border-radius:22px;border:1px solid #405b7a;background:#19304c;padding:25px;max-width:800px;margin:20px 0}.dim{color:#b4c8df}.clock{font-size:clamp(44px,10vw,120px);font-weight:800;font-variant-numeric:tabular-nums}.notice{border-left:4px solid #73eadb;padding:12px 16px;background:#193047}.actions a{display:inline-block;color:#092527;background:#73eadb;padding:14px 18px;border-radius:12px;text-decoration:none;font-weight:800}.hint{line-height:1.7}.foot{font-size:13px;color:#b4c8df;margin-top:20px}@media(max-width:750px){.top{padding:10px}.controls button{padding:9px}#frame{height:calc(100vh - 116px)}}
 .next-up{position:sticky;top:0;z-index:5;min-height:160px;margin:16px 0;padding:18px 22px;border:2px solid #73eadb;border-radius:20px;background:#1b3a55;box-shadow:0 4px 20px #0005}.next-label{font-size:16px;letter-spacing:.1em;color:#8ff6e5;font-weight:800}.next-title{font-size:clamp(24px,4vw,44px);font-weight:800;line-height:1.2;margin:8px 0}.next-meta{font-size:clamp(15px,2vw,22px);font-weight:700}.next-countdown{font-size:18px;color:#9af2e1;font-weight:800;margin-top:8px}.calendar-info{margin:8px 0 22px;font-size:18px}.agenda{max-width:1000px}.agenda-row{display:grid;grid-template-columns:minmax(112px,170px) 1fr;gap:18px;align-items:stretch;margin:10px 0}.agenda-time{padding:18px 12px 18px 0;text-align:right;font-weight:800;font-size:18px;color:#adebe6;line-height:1.3}.agenda-event{border-radius:15px;padding:16px 20px;background:#19304c;border-left:6px solid #74e3d6}.agenda-event h2{font-size:clamp(18px,2.2vw,25px);margin:0 0 8px}.agenda-meta{font-size:15px;color:#aebfd4}.agenda-all-day{margin:20px 0 8px;font-weight:800;color:#aebfd4;font-size:15px}.agenda-empty{border:1px solid #405b7a;border-radius:16px;padding:24px;background:#19304c}.calendar-connection{border-radius:12px;padding:12px 16px;margin:10px 0;background:#183c53;border:1px solid #467b8b;color:#d5eef6;font-size:14px;line-height:1.4}.calendar-connection.auth{background:#493b29;border-color:#927849;color:#fff1d3}.agenda-refresh{padding:9px 15px;background:#73eadb;color:#073333;border:0;border-radius:9px;font-weight:800;cursor:pointer;margin-left:8px}@media(max-width:600px){.agenda-row{grid-template-columns:1fr;gap:3px}.agenda-time{text-align:left;padding:9px 0 2px}.agenda-event{padding:13px 15px}}
@@ -59,13 +60,14 @@ body{width:100%;height:100vh;height:100dvh;min-height:0;overflow:hidden;padding:
 @media(max-height:600px){.calendar-screen>.small,.calendar-screen .foot{display:none}.calendar-screen .next-up{padding:7px 11px;margin:4px 0}.calendar-screen .next-title{font-size:20px}.calendar-screen .calendar-info{margin:3px 0}}
 </style></head>
 <body>
-<header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button><button data-mode="activities">✨ What to Do</button><button data-mode="waste">♻️ Coleta</button><button data-mode="meals">🍲 Meals</button><button data-mode="finance">🔒 Finance</button></nav></header>
+<header class="top"><div><div class="brand">🏠 Family Smart Dashboard</div><div class="small" id="now">Ottawa local time</div></div><nav class="controls" aria-label="Preview panels"><button data-mode="auto" class="current">Automatic</button><button data-mode="weather">Clothes</button><button data-mode="calendar">Calendar</button><button data-mode="night">Night</button><button data-mode="activities">✨ What to Do</button><button data-mode="waste">♻️ Coleta</button><button data-mode="meals">🍲 Meals</button><button data-mode="todos">✅ To-Dos</button><button data-mode="finance">🔒 Finance</button></nav></header>
 <main id="stage" aria-live="polite"></main>
 <script src="/family-dashboard/finance.js?v=notion-auto-2"></script>
 <script src="/family-dashboard/home.js?v=romance-home-guide-v1"></script>
 <script src="/family-dashboard/activities.js?v=romance-home-guide-v1"></script>
 <script src="/family-dashboard/waste.js?v=ottawa-waste-next-v1"></script>
 <script src="/family-dashboard/meals.js?v=swipe-20261022"></script>
+<script src="/family-dashboard/todos.js?v=1"></script>
 <script>
 'use strict';
 const TZ='America/Toronto';const BASE='../kids-weather-panel/?v=5';
@@ -113,6 +115,7 @@ if(mode==='activities'){
   if(window.ActivitiesPanel)ActivitiesPanel.mount(view,()=>visible==='activities');
   return;
 }
+if(mode==='todos'){const view=document.createElement('section');view.className='todos-mount';el.appendChild(view);window.TodosPanel?.mount(view);return;}
 if(mode==='finance'){const view=document.createElement('section');view.className='view';el.appendChild(view);if(window.FinancePanel)FinancePanel.mount(view,()=>visible==='finance');else view.innerHTML='<h1>Finance temporarily unavailable</h1><p class="dim">Try refreshing the page. The calendar and automatic schedule remain available.</p>';return;}
 if(mode==='waste'){const view=document.createElement('section');view.className='waste-mount';el.appendChild(view);if(window.WastePanel)WastePanel.mount(view,()=>{manual='auto';visible='';render();});else view.textContent='Calendário de coleta indisponível.';return;}
 if(mode==='meals'){const view=document.createElement('section');view.className='meals-mount';el.appendChild(view);if(window.MealsPanel)MealsPanel.mount(view);else view.textContent='Refeições temporariamente indisponíveis.';return;}
@@ -353,6 +356,7 @@ function render(){
  document.getElementById('now').textContent=p.weekday+', '+p.month+' '+p.day+' · '+p.hour+':'+p.minute+' · Ottawa';
  if(manual!=='auto'&&now>=manualUntil){manual='auto';manualUntil=0;}
  refreshDaily(p);
+ window.TodosPanel?.tick(p);
  refreshLunchCalendar(p);
  const selected=manual==='auto'?which(p):manual;
  if(selected!==visible){if(visible==='finance'&&window.FinancePanel)FinancePanel.lock();visible=selected;setUI(selected);}
@@ -380,7 +384,7 @@ window.addEventListener('resize',()=>{
 // Read-only bridge for the independent voice module. Private Finance is excluded.
 window.familyDashboardVoice=Object.freeze({
  showScreen(name){
-  if(!['auto','weather','calendar','night','activities','waste','meals'].includes(name))return false;
+  if(!['auto','weather','calendar','night','activities','waste','meals','todos'].includes(name))return false;
   const button=document.querySelector('[data-mode="'+name+'"]');
   if(!button)return false;
   button.click();
