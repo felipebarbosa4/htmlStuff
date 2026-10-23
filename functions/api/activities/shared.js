@@ -11,6 +11,17 @@ export const json = (data, status=200) => new Response(JSON.stringify(data), {
     'referrer-policy':'no-referrer'
   }
 });
+// 429 is machine-readable for a real on-tablet countdown. The Retry-After
+// header is standard; the JSON field also works in browser WebViews.
+export function tooSoon(last,windowMs=90000,now=Date.now()) {
+  const remaining=Math.max(1,Math.ceil((last+windowMs-now)/1000));
+  const r=json({error:'Aguarde para atualizar novamente.',retryAfterSeconds:remaining},429);
+  r.headers.set('Retry-After',String(remaining));
+  return r;
+}
+export function refreshAfter(last,windowMs=90000) {
+  return {nextRefreshAt:new Date(last+windowMs).toISOString()};
+}
 export function local(date=new Date()) {
   const obj = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone:ZONE,year:'numeric',month:'2-digit',day:'2-digit',

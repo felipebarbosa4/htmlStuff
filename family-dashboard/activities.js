@@ -61,7 +61,7 @@ window.ActivitiesPanel={
   const ctrl=new AbortController(),signal=ctrl.signal;
   const root=el('section','activities-root');root.setAttribute('aria-label','Family outing planner');
   host.appendChild(root);
-  root.innerHTML=`<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub"><span id="ideas-clock"></span> · Ottawa · <span id="ideas-status">On demand</span></div></div><button id="ideas-refresh" type="button" class="activities-refresh">↻ Refresh Ideas</button></div>
+  root.innerHTML=`<div class="activities-top"><div><h1>✨ What to Do</h1><div class="activities-sub"><span id="ideas-clock"></span> · Ottawa · <span id="ideas-status">On demand</span></div></div><div class="activities-refresh-stack"><button id="ideas-refresh" type="button" class="activities-refresh">↻ Refresh Ideas</button><span class="activities-cooldown" id="ideas-cooldown" role="timer" hidden></span></div></div>
   <div class="activities-controls">
     <div class="activities-modes" role="group" aria-label="Outing type"><button data-mode-choice="couple">❤️ Couple</button><button data-mode-choice="family">👨‍👩‍👧‍👦 Family</button><button data-mode-choice="visits">🏠 Visits</button></div>
     <div class="activities-filters">
@@ -74,7 +74,7 @@ window.ActivitiesPanel={
   <div class="activities-carousel" id="ideas-grid" tabindex="0" aria-label="Deslize horizontalmente para ver mais recomendações" aria-live="polite"><div class="activities-track" id="ideas-track"></div></div>
   <div class="activities-footer"><span id="ideas-caption">📍 20 km by road · Google Maps</span><div class="activities-pages"><span id="ideas-page">Deslize ← → · 1 / 1</span></div></div>`;
   const q=s=>root.querySelector(s),grid=q('#ideas-grid'),track=q('#ideas-track'),meta=q('#ideas-status'),refresh=q('#ideas-refresh');
-  const pageLabel=q('#ideas-page'),caption=q('#ideas-caption');
+  const pageLabel=q('#ideas-page'),caption=q('#ideas-caption'),cooldown=q('#ideas-cooldown');
   const state={
     mode:['couple','family','visits'].includes(savedControls.mode)?savedControls.mode:'family',
     budget:['free','under100','any'].includes(savedControls.budget)?savedControls.budget:'any',
@@ -90,6 +90,47 @@ window.ActivitiesPanel={
   if(state.mode==='couple')state.kids=0;
   const params=()=>({mode:state.mode,adults:state.adults,kidsYes:state.mode!=='couple'&&state.kids>0,kids:state.mode==='couple'?0:state.kids,budget:state.budget,environment:state.environment,maxKm:state.maxKm});
   const persist=()=>{try{localStorage.setItem('family:activities:controls:v2',JSON.stringify(params()));}catch{}};
+  // A single Ideas cooldown is shared across modes. Discovery's server limiter
+  // is keyed by (kind,mode,radius) or (movies,mode,audience).
+  const cooldownKey=(kind=state.kind,mode=state.mode)=>kind==='ideas'?'ideas':
+    kind==='movies'?'movies:'+mode+':'+(state.kids>0?'kids':'adults'):
+      kind==='events'?'events:'+mode+':'+state.maxKm:'home';
+  const storageKey=key=>'family:activities:cooldown:v1:'+key;
+  const savedDeadline=key=>{
+    try{
+      const until=Number(localStorage.getItem(storageKey(key))||0);
+      // Avoid leaving the tablet disabled due to invalid or stale storage.
+      return Number.isFinite(until)&&until>Date.now()&&until-Date.now()<=120000?until:0;
+    }catch{return 0;}
+  };
+  const cooldowns=new Map();
+  const cooldownUntil=key=>Math.max(cooldowns.get(key)||0,savedDeadline(key));
+  const remainingMs=key=>Math.max(0,cooldownUntil(key)-Date.now());
+  const setCooldown=(key,seconds)=>{
+    const sec=Math.max(0,Math.min(120,Number(seconds)||0));
+    if(!sec)return;
+    const until=Date.now()+Math.ceil(sec*1000);
+    cooldowns.set(key,until);
+    try{localStorage.setItem(storageKey(key),String(until));}catch{}
+  };
+  const countdownText=seconds=>{
+    const total=Math.max(0,Math.ceil(seconds)),mm=Math.floor(total/60),ss=total%60;
+    return String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+  };
+  function updateCountdown(){
+    if(!active())return;
+    if(state.kind==='home'){
+      cooldown.hidden=true;refresh.disabled=state.busy;
+      return;
+    }
+    const remain=remainingMs(cooldownKey());
+    cooldown.hidden=remain<=0;
+    cooldown.textContent=remain?'⏳ Pode atualizar em '+countdownText(remain/1000):'';
+    refresh.disabled=state.busy||remain>0;
+    if(remain>0)refresh.title='Aguarde '+countdownText(remain/1000)+' para atualizar novamente';
+    else refresh.removeAttribute('title');
+  }
+
   const active=()=>root.isConnected&&isActive();
   function fit(){if(active())root.style.height=Math.max(0,window.innerHeight-root.getBoundingClientRect().top-2)+'px';}
   function pageSize(){
@@ -129,7 +170,7 @@ window.ActivitiesPanel={
         'Preparem pipoca e conversem sobre as cenas favoritas ao terminar'],
       sourceUrl:best.sourceUrl,posterUrl:best.posterUrl||'',category:'home'};
   };
-  function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode):
+  function urlFor(kind){return kind==='ideas'?'/api/activities?mode='+encodeURIComponent(state.mode)+'&maxKm='+state.maxKm:
     '/api/activities/discover?kind='+kind+'&mode='+encodeURIComponent(state.mode)+
       '&maxKm='+state.maxKm+'&kidsYes='+(state.kids>0?'true':'false');}
   function controls(){
@@ -152,6 +193,7 @@ window.ActivitiesPanel={
     q('#ideas-budget').value=state.budget;q('#ideas-distance').value=String(state.maxKm);
     refresh.textContent=state.busy?'⏳ Conferindo…':state.kind==='ideas'?'↻ Refresh Ideas':state.kind==='events'?'↻ Find Events':state.kind==='home'?'↻ Outras ideias':'↻ Find Movies';
     refresh.disabled=state.busy;
+    updateCountdown();
     caption.textContent=state.kind==='home'?'🏠 Guias completos no tablet · sem abrir páginas externas · sem custos de IA':
       state.kind==='ideas'?'📍 '+state.maxKm+' km by road · Google Maps location/hours · Admission sourced separately':
       state.kind==='events'?'🎟 Events today · '+state.maxKm+' km · Data: Has Things (ODbL 1.0)':
@@ -521,7 +563,11 @@ window.ActivitiesPanel={
   function render(){
     if(!active())return;
     controls();fit();track.replaceChildren();
-    const arr=state.kind==='movies'?visibleMovies(state.items):state.items;
+    // The selected driving radius is authoritative even while displaying
+    // older cached results. Never display a 17 km place at a 10 km setting.
+    const arr=state.kind==='movies'?visibleMovies(state.items):
+      state.kind==='ideas'?state.items.filter(x=>Number.isFinite(x.km)&&x.km>=0&&x.km<=state.maxKm):
+      state.kind==='events'?state.items.filter(x=>Number.isFinite(x.km)&&x.km>=0&&x.km<=state.maxKm):state.items;
     const pageSizeNow=pageSize(),max=Math.max(1,Math.ceil(arr.length/pageSizeNow));
     const columns=((state.kind==='movies'||state.kind==='ideas'||state.kind==='home')&&window.innerWidth>=740&&
       (state.kind==='movies'||grid.getBoundingClientRect().height>=200))?2:1;
@@ -533,7 +579,10 @@ window.ActivitiesPanel={
       panel.style.gridTemplateRows='minmax(0,1fr)';
       track.append(panel);
       if(state.busy)message('Finding '+types[state.kind].toLowerCase()+'…','Checking up-to-date sources, available time and family preferences.');
-      else message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
+      else if(state.kind==='ideas'&&state.items.length&&!arr.length){
+        message('Nenhum local até '+state.maxKm+' km nesta lista',
+          'As sugestões salvas estão fora do raio escolhido. Use Refresh Ideas para pesquisar novos locais até '+state.maxKm+' km.');
+      }else message(state.error?'Recommendations unavailable':'No saved '+types[state.kind].toLowerCase(),
         'Press Refresh to find ideas for this mode. Nothing is generated automatically.');
     }else{
       for(let start=0;start<arr.length;start+=pageSizeNow){
@@ -555,14 +604,17 @@ window.ActivitiesPanel={
     const mismatch=state.kind==='ideas'&&state.snapshot?.options&&
       ['kids','budget','environment','maxKm'].some(k=>state.snapshot.options[k]!==state[k]);
     meta.textContent=(state.kind==='home'?'Escolha uma atividade e toque para ver o guia':
-      last?'Saved '+stamp(last)+(mismatch?' · Filters changed; press Refresh':''):'Not generated')+
+      last?'Salvo '+stamp(last)+(mismatch?' · Filtros alterados — atualize para nova busca':''):'Sem sugestões salvas')+
+      (state.kind==='ideas'&&arr.length<state.items.length?
+        ' · '+arr.length+'/'+state.items.length+' locais até '+state.maxKm+' km':'')+
       (state.kind==='home'?' · '+arr.length+' ideias para '+(state.mode==='couple'?'um encontro romântico':state.mode==='visits'?'receber visitas':state.kids>0?'a família':'adultos'):'')+
       (state.kind==='movies'&&state.kids>0&&state.items.length>arr.length?' · '+(state.items.length-arr.length)+' filmes 14A/sem classificação ocultados':'')+
       (state.kind==='movies'&&arr.length?' · '+arr.length+' filmes confirmados'+
         (arr.some(x=>x.metadataVersion!==2)?' · Atualize para nota e sinopse em PT-BR':''):'')+
       (state.kind==='ideas'&&arr.length&&state.snapshot?.locale!=='pt-BR'?
         ' · Atualize para sugestões em português':'')+
-      (state.error&&arr.length?' · '+state.error:'');
+      (state.error&&arr.length?' · Falha na última atualização; lista salva preservada':'');
+    meta.title=state.error||'';
   }
   async function load(){
     if(!active())return;
@@ -610,12 +662,25 @@ window.ActivitiesPanel={
     if(state.kind==='home'){state.homeRotation++;
       try{localStorage.setItem('family:activities:home:rotation',String(state.homeRotation));}catch{}
       load();return;}
+    const key=cooldownKey();
+    if(remainingMs(key)>0){updateCountdown();return;}
     state.busy=true;state.error='';const kind=state.kind,mode=state.mode,kids=state.kids;render();
     try{
       const target=kind==='ideas'?'/api/activities/generate':'/api/activities/discover';
       const r=await fetch(target,{method:'POST',credentials:'same-origin',cache:'no-store',signal,
         headers:{'content-type':'application/json'},body:JSON.stringify({...params(),kind})});
-      const d=await r.json();if(!r.ok)throw Error(d.error||'Generation failed');
+      const d=await r.json();
+      if(r.status===429){
+        const retry=Number(d.retryAfterSeconds)||Number(r.headers.get('Retry-After'))||0;
+        if(retry>0)setCooldown(key,retry);
+        // A 429 doesn't invalidate already saved cards; the timer explains it.
+        if(retry>0){state.error='';return;}
+      }
+      if(!r.ok)throw Error(d.error||'Generation failed');
+      if(d.nextRefreshAt){
+        const remaining=Date.parse(d.nextRefreshAt)-Date.now();
+        if(Number.isFinite(remaining)&&remaining>0)setCooldown(key,Math.ceil(remaining/1000));
+      }
       if(state.mode!==mode||state.kind!==kind||(kind==='movies'&&state.kids!==kids))return;
       state.snapshot=d;state.items=(d.items||[]).map(x=>({...x,kind}));
       state.page=0;
@@ -642,7 +707,7 @@ window.ActivitiesPanel={
   q('#ideas-budget').addEventListener('change',e=>{state.budget=e.target.value;persist();render();},{signal});
   q('#ideas-distance').addEventListener('change',e=>{
     state.maxKm=Number(e.target.value);persist();
-    if(state.kind==='events')load(); else render();
+    if(state.kind==='events')load();else render();
   },{signal});
   refresh.addEventListener('click',generate,{signal});
   grid.addEventListener('scroll',updateScrollPage,{signal,passive:true});
@@ -651,9 +716,10 @@ window.ActivitiesPanel={
     e.preventDefault();
     grid.scrollBy({left:(e.key==='ArrowRight'?1:-1)*grid.clientWidth,behavior:'smooth'});
   },{signal});
+  const countdownTicker=setInterval(updateCountdown,1000);
   window.addEventListener('resize',render,{signal});
   window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();},{signal});
-  cleanup=()=>{closeModal();ctrl.abort();};
+  cleanup=()=>{closeModal();clearInterval(countdownTicker);ctrl.abort();};
   window.ActivitiesPanel.resume=()=>{fit();const clock=q('#ideas-clock');if(clock)clock.textContent=fmt();};
   render();loadFeedback();load();
  }

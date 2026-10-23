@@ -1,4 +1,4 @@
-import {json,getJSON,local} from './shared.js';
+import {tooSoon,refreshAfter,json,getJSON,local} from './shared.js';
 import {normalizeOptions,validOrigin,safeSource} from './config.js';
 import {originPoint} from './generate.js';
 import {tmdbMovies,hasThingsEvents,movieCredit,eventCredit} from './providers.js';
@@ -150,8 +150,9 @@ export async function onRequestPost({request,env}){
     if(kind==='movies'&&!env.TMDB_API_KEY)return json({error:'TMDB_API_KEY missing. Add your TMDB API Read Access Token in Cloudflare Production secrets.'},503);
     const key=keyword(kind,opts.mode,opts.maxKm,opts),limit=key+':last-request';
     const last=Number(await env.ACTIVITIES_KV.get(limit)||0);
-    if(Date.now()-last<90000)return json({error:'Please wait before another discovery refresh'},429);
-    await env.ACTIVITIES_KV.put(limit,String(Date.now()),{expirationTtl:120});
+    const requestAt=Date.now();
+    if(last>0&&requestAt-last<90000)return tooSoon(last,90000,requestAt);
+    await env.ACTIVITIES_KV.put(limit,String(requestAt),{expirationTtl:120});
     let items=[],fallbackUsed=false,feedFailed=false;
     if(kind==='movies'){
       items=(await tmdbMovies(env,opts,now)).filter(x=>opts.kids===0||kidAppropriateMovie(x));
@@ -183,6 +184,6 @@ export async function onRequestPost({request,env}){
         'TMDB Canada theatrical releases: prioritize this month, include recent months if needed to offer up to 12. Local showtimes not verified. TMDB does not endorse this app.':
         'Data: Has Things (ODbL 1.0). Other events may come from cited OpenAI web search. Recheck organizers and child suitability.'};
     await env.ACTIVITIES_KV.put(key,JSON.stringify(saved),{expirationTtl:kind==='movies'?35*86400:2*86400});
-    return json(saved);
+    return json({...saved,...refreshAfter(requestAt)});
   }catch(e){return json({error:String(e?.message||'Research failed').slice(0,160)},502);}
 }

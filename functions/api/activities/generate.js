@@ -1,4 +1,4 @@
-import {ZONE,CACHE_KEY,MAX_KM,json,local,addDay,ranges,openDuring,outdoorWeather,hourText,getJSON} from './shared.js';
+import {tooSoon,refreshAfter,ZONE,CACHE_KEY,MAX_KM,json,local,addDay,ranges,openDuring,outdoorWeather,hourText,getJSON} from './shared.js';
 import {onRequestGet as calendarGet} from '../calendar.js';
 import {hoursForDate} from './hours.js';
 import {venueFacts,factsDisplay} from './enrich.js';
@@ -182,8 +182,9 @@ export async function onRequestPost(context) {
     const history=preferencesFrom(await env.ACTIVITIES_KV.get(FEEDBACK_KEY,'json'));
     const counts=learnedCounts(history,options.mode);
     const last=Number(await env.ACTIVITIES_KV.get(CACHE_KEY+':last-request')||0);
-    if(Date.now()-last<90000)return json({error:'Refresh was used recently. Try again in a minute.'},429);
-    await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(Date.now()),{expirationTtl:120});
+    const requestAt=Date.now();
+    if(last>0&&requestAt-last<90000)return tooSoon(last,90000,requestAt);
+    await env.ACTIVITIES_KV.put(CACHE_KEY+':last-request',String(requestAt),{expirationTtl:120});
     const now=local();
     const night=isNight(now.minute);
     const latest=night?1440:options.mode==='couple'?1410:options.mode==='visits'?1290:1200;
@@ -277,6 +278,6 @@ export async function onRequestPost(context) {
       items:items.map(({id,category,bring,reason})=>({id,category,bring,reason})),
       timezone:ZONE,locale:'pt-BR',options};
     await env.ACTIVITIES_KV.put(keyFor(options.mode),JSON.stringify(stored),{expirationTtl:28*24*60*60});
-    return json(result);
+    return json({...result,...refreshAfter(requestAt)});
   }catch(e){return json({error:String(e?.message||'Generation failed').slice(0,220)},502);}
 }

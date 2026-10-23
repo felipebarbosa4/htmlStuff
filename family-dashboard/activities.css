@@ -386,3 +386,10 @@
  .activities-home-guide-steps li{font-size:13px}
  .activities-home-guide-summary>div{padding:4px 7px;font-size:12px}
 }
+
+/* Compact countdown alongside the existing Refresh action; no extra page rows. */
+.activities-refresh-stack{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:0}
+.activities-cooldown{font-size:clamp(10px,1.1vw,12px);font-weight:750;color:#8deedd;line-height:1.1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.activities-cooldown[hidden]{display:none!important}
+.activities-refresh:disabled{opacity:.68;cursor:not-allowed}
+@media(max-height:600px){.activities-refresh-stack{gap:0}.activities-cooldown{font-size:10px}}

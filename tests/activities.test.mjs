@@ -112,6 +112,7 @@ test('manual generation: GPT-6 Luna, real route threshold, KV persistence, photo
     const generated=await onRequestPost(ctx);
     assert.equal(generated.status,200,await generated.clone().text()); // preserve response body
     const generatedData=await generated.json();
+    assert.equal(generatedData.nextRefreshAt,'2026-10-20T16:31:30.000Z');
     assert.ok(generatedData.items.every(x=>x.bestTime==='Leave at 5:00 PM'),
       'all-day items must be ignored, but the 3:30–5:00 PM appointment must be avoided');
     const data=JSON.parse(values.get('family:activities:v2:family'));
@@ -591,4 +592,55 @@ test('Couple always excludes children even if a stored toggle or API body says K
  assert.equal(normalizeOptions({mode:'couple',kidsYes:false,kids:5}).kids,0);
  assert.equal(normalizeOptions({mode:'family',kidsYes:true}).kids,2);
  assert.equal(normalizeOptions({mode:'visits',kidsYes:false}).kids,0);
+});
+
+test('reading cached Ideas always applies requested road-distance radius, not saved old radius',async()=>{
+ const oldFetch=global.fetch,calls=[];
+ const response=data=>new Response(JSON.stringify(data),{status:200,headers:{'content-type':'application/json'}});
+ const saved={mode:'family',date:'2026-10-12',generatedAt:'2026-10-12T16:00:00Z',
+   options:{mode:'family',adults:2,kids:2,maxKm:20},items:[
+     {id:'near_id',category:'park',reason:'Passeio',bring:'Água'},
+     {id:'far_id',category:'museum',reason:'Museu',bring:'Caderno'}]};
+ const env={HOME_ADDRESS:'PRIVATE_HOME',GOOGLE_MAPS_API_KEY:'fake',ACTIVITIES_KV:{
+   get:async key=>key==='family:activities:v2:family'?saved:null}};
+ global.fetch=async(url,opts={})=>{
+   url=String(url);calls.push(url);
+   if(url.includes('geocode/json'))return response({status:'OK',results:[{geometry:{location:{lat:45.4,lng:-75.7}}}]});
+   if(url.includes('/v1/places/'))return response({id:url.split('/').pop(),displayName:{text:'Sample Venue'},formattedAddress:'Ottawa',businessStatus:'OPERATIONAL'});
+   if(url.includes('distanceMatrix/v2:computeRouteMatrix')){
+     return response([{originIndex:0,destinationIndex:0,condition:'ROUTE_EXISTS',distanceMeters:6500,duration:'720s'},
+       {originIndex:0,destinationIndex:1,condition:'ROUTE_EXISTS',distanceMeters:17600,duration:'1800s'}]);
+   }
+   throw Error('unexpected '+url);
+ };
+ try{
+   const get=async km=>(await onRequestGet({env,request:new Request('https://dash.example.org/api/activities?mode=family&maxKm='+km)})).json();
+   const narrow=await get(10);
+   assert.equal(narrow.requestedMaxKm,10);
+   assert.equal(narrow.effectiveMaxKm,10);
+   assert.deepEqual(narrow.items.map(x=>x.id),['near_id']);
+   assert(narrow.items.every(x=>x.km<=10));
+   const short=await get(5);assert.equal(short.items.length,0);
+   const wide=await get(20);assert.deepEqual(wide.items.map(x=>x.id),['near_id','far_id']);
+   assert.equal(wide.items[1].km,17.6);
+   assert(!calls.some(x=>x.includes('api.openai.com')),'Changing the radius never needs new AI calls');
+ }finally{global.fetch=oldFetch;}
+});
+test('Ideas and Events throttling include a numeric Retry-After and exact seconds to retry',async()=>{
+ const now=Date.now(),last=now-30000;
+ const kv={get:async k=>k==='family:activities:v1:last-request'||k==='family:activities:discovery:v2:events:family:20km:last-request'?String(last):null};
+ const env={ACTIVITIES_KV:kv,OPENAI_API_KEY:'fake',GOOGLE_MAPS_API_KEY:'fake',HOME_ADDRESS:'private'};
+ const opts={method:'POST',headers:{origin:'https://dash.example.org','content-type':'application/json','sec-fetch-site':'same-origin'},body:'{}'};
+ const ideas=await onRequestPost({request:new Request('https://dash.example.org/api/activities/generate',opts),env});
+ assert.equal(ideas.status,429);
+ assert.match(ideas.headers.get('Retry-After'),/^\d+$/);
+ const body=await ideas.json();
+ assert.match(body.error,/Aguarde/);
+ assert(body.retryAfterSeconds>=59&&body.retryAfterSeconds<=61);
+ const event=await discover({request:new Request('https://dash.example.org/api/activities/discover',{
+   ...opts,body:JSON.stringify({kind:'events',mode:'family',maxKm:20})}),env});
+ assert.equal(event.status,429);
+ const info=await event.json();
+ assert(info.retryAfterSeconds>=59&&info.retryAfterSeconds<=61);
+ assert.equal(event.headers.get('Retry-After'),String(info.retryAfterSeconds));
 });
